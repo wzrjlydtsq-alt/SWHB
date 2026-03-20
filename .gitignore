@@ -1,0 +1,27 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+
+# Database files
+*.db
+*.db.backup
+
+# Debug files
+api_debug_*.json
+nano-banana-log.txt
+task_executor_dump.txt
+
+# Cache directories
+Asset_Cache/
+
+# Build artifacts
+build/eslint_errors.txt
+
+# Test files
+test_*.js
+test_*.mjs
+btc.txt
+eth.txt

@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    /* 渐进迁移：允许 JS 和 TS 共存 */
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+
+    /* 模块 */
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+
+    /* JSX */
+    "jsx": "react-jsx",
+
+    /* 输出 */
+    "noEmit": true,
+    "declaration": false,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+
+    /* 路径别名 */
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/renderer/*"],
+      "@main/*": ["src/main/*"],
+      "@preload/*": ["src/preload/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "src/**/*.jsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "dist"
+  ]
+}

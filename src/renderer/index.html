@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-eval' 'unsafe-inline';
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https: xinghe:;
+        media-src 'self' data: blob: https: xinghe:;
+        connect-src 'self' https: http: ws: wss: blob: data:;
+        font-src 'self' data:;
+      "
+    />
+    <title>星河智绘</title>
+
+    <!-- 字体：使用系统字体栈，避免依赖 CDN（Electron 常离线使用） -->
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script>
+      window.onerror = function (message, source, lineno, colno, error) {
+        document.getElementById('root').innerHTML =
+          '<div style="color:white; z-index:99999; position:absolute; top:20px; left:20px; font-size: 20px;">' +
+          message +
+          '<br/>' +
+          source +
+          ':' +
+          lineno +
+          '</div>'
+      }
+    </script>
+
+    <script type="module" src="./main.jsx"></script>
+  </body>
+</html>
