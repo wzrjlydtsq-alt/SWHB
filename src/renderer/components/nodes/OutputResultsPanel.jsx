@@ -189,7 +189,12 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
         zIndex: 50
       }}
       onMouseDown={(e) => e.stopPropagation()}
-      onClick={() => contextMenu && closeContextMenu()}
+      onClick={(e) => {
+        // 只在右键菜单外部区域点击时关闭菜单
+        if (contextMenu && !e.target.closest('[data-context-menu]')) {
+          closeContextMenu()
+        }
+      }}
     >
       <div className="flex flex-nowrap gap-2">
         {results.map((result, idx) => {
@@ -250,9 +255,10 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
       {/* Right-click context menu */}
       {contextMenu && (
         <div
+          data-context-menu
           className="fixed z-[200] w-36 rounded-lg shadow-xl border bg-[#18181b] border-zinc-800 p-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
-          onMouseLeave={closeContextMenu}
+          onClick={(e) => e.stopPropagation()}
         >
           <button
             className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 rounded hover:bg-zinc-800"
@@ -288,7 +294,8 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
           <div className="my-1 border-t border-zinc-700/50" />
           <button
             className="w-full text-left px-3 py-1.5 text-xs text-red-400 rounded hover:bg-zinc-800"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation()
               const updated = results.filter((_, i) => i !== contextMenu.idx)
               if (updateNodeSettings) updateNodeSettings(nodeId, { outputResults: updated })
               closeContextMenu()

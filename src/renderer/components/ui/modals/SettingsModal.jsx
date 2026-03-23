@@ -149,7 +149,7 @@ export function SettingsModal({
                         <input
                           type="text"
                           value={useAppStore.getState().chatApiUrl}
-                          onChange={(e) => useAppStore.setState({ chatApiUrl: e.target.value })}
+                          onChange={(e) => useAppStore.setState({ chatApiUrl: e.target.value.trim() })}
                           className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                           placeholder="https://api.openai.com"
                         />
@@ -162,7 +162,7 @@ export function SettingsModal({
                           <input
                             type={visibleKeys.has('chat') ? 'text' : 'password'}
                             value={useAppStore.getState().chatApiKey}
-                            onChange={(e) => useAppStore.setState({ chatApiKey: e.target.value })}
+                            onChange={(e) => useAppStore.setState({ chatApiKey: e.target.value.trim() })}
                             className="w-full rounded-lg px-3 py-2 pr-9 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                             placeholder="sk-..."
                           />
@@ -195,7 +195,7 @@ export function SettingsModal({
                         <input
                           type="text"
                           value={useAppStore.getState().imageApiUrl}
-                          onChange={(e) => useAppStore.setState({ imageApiUrl: e.target.value })}
+                          onChange={(e) => useAppStore.setState({ imageApiUrl: e.target.value.trim() })}
                           className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                           placeholder="https://api.openai.com"
                         />
@@ -208,7 +208,7 @@ export function SettingsModal({
                           <input
                             type={visibleKeys.has('image') ? 'text' : 'password'}
                             value={useAppStore.getState().imageApiKey}
-                            onChange={(e) => useAppStore.setState({ imageApiKey: e.target.value })}
+                            onChange={(e) => useAppStore.setState({ imageApiKey: e.target.value.trim() })}
                             className="w-full rounded-lg px-3 py-2 pr-9 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                             placeholder="sk-..."
                           />
@@ -241,7 +241,7 @@ export function SettingsModal({
                         <input
                           type="text"
                           value={useAppStore.getState().videoApiUrl}
-                          onChange={(e) => useAppStore.setState({ videoApiUrl: e.target.value })}
+                          onChange={(e) => useAppStore.setState({ videoApiUrl: e.target.value.trim() })}
                           className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                           placeholder="https://api.openai.com"
                         />
@@ -254,7 +254,7 @@ export function SettingsModal({
                           <input
                             type={visibleKeys.has('video') ? 'text' : 'password'}
                             value={useAppStore.getState().videoApiKey}
-                            onChange={(e) => useAppStore.setState({ videoApiKey: e.target.value })}
+                            onChange={(e) => useAppStore.setState({ videoApiKey: e.target.value.trim() })}
                             className="w-full rounded-lg px-3 py-2 pr-9 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                             placeholder="sk-..."
                           />
@@ -282,6 +282,14 @@ export function SettingsModal({
                     )}
                     <button
                       onClick={() => {
+                        const state = useAppStore.getState()
+                        // 持久化全局 API 配置到 SQLite
+                        state.setChatApiKey(state.chatApiKey)
+                        state.setChatApiUrl(state.chatApiUrl)
+                        state.setImageApiKey(state.imageApiKey)
+                        state.setImageApiUrl(state.imageApiUrl)
+                        state.setVideoApiKey(state.videoApiKey)
+                        state.setVideoApiUrl(state.videoApiUrl)
                         setGlobalSaveStatus('保存成功！')
                         setTimeout(() => setGlobalSaveStatus(''), 2000)
                       }}
@@ -624,7 +632,7 @@ export function SettingsModal({
                             <input
                               type={visibleKeys.has(api.id) ? 'text' : 'password'}
                               value={api.key || ''}
-                              onChange={(e) => updateApiConfig(api.id, { key: e.target.value })}
+                              onChange={(e) => updateApiConfig(api.id, { key: e.target.value.trim() })}
                               className="w-full rounded-lg px-3 py-2 pr-9 text-xs outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-300 focus:border-[var(--primary-color)]"
                               placeholder="留空使用分类默认 Key"
                             />

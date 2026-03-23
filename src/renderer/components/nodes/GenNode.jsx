@@ -34,7 +34,11 @@ function areGenNodePropsEqual(prevProps, nextProps) {
     ps.videoEndFrameUrl !== ns.videoEndFrameUrl ||
     ps.videoRefUrls !== ns.videoRefUrls ||
     ps.generateAudio !== ns.generateAudio ||
-    ps.enableWebSearch !== ns.enableWebSearch
+    ps.enableWebSearch !== ns.enableWebSearch ||
+    ps.manualStartFrame !== ns.manualStartFrame ||
+    ps.manualEndFrame !== ns.manualEndFrame ||
+    ps.veoFramesMode !== ns.veoFramesMode ||
+    ps.batchSize !== ns.batchSize
   ) return false
 
   // 比较参考图/音频数组长度
@@ -52,9 +56,9 @@ function areGenNodePropsEqual(prevProps, nextProps) {
   if (pai.length !== nai.length) return false
   if (pai.length > 0 && pai[pai.length - 1] !== nai[nai.length - 1]) return false
 
-  // 比较 results 数组长度
-  const pr = ps.results || []
-  const nr = ns.results || []
+  // 比较 outputResults 数组长度
+  const pr = ps.outputResults || []
+  const nr = ns.outputResults || []
   if (pr.length !== nr.length) return false
   if (pr.length > 0 && pr[pr.length - 1]?.url !== nr[nr.length - 1]?.url) return false
 
@@ -90,6 +94,11 @@ export const GenNode = React.memo(function GenNode({
   getConnectedAudioNodes,
   setLightboxItem
 }) {
+  // 直接从 store 订阅首尾帧和开关状态，绕过 ReactFlow props 缓存
+  const storeManualStartFrame = useAppStore((state) => state.nodesMap.get(node.id)?.settings?.manualStartFrame)
+  const storeManualEndFrame = useAppStore((state) => state.nodesMap.get(node.id)?.settings?.manualEndFrame)
+  const storeVeoFramesMode = useAppStore((state) => state.nodesMap.get(node.id)?.settings?.veoFramesMode)
+
   const [localPrompt, setLocalPrompt] = useState(
     node.type === 'gen-image' ? node.settings?.prompt || '' : node.settings?.videoPrompt || ''
   )
@@ -322,8 +331,8 @@ export const GenNode = React.memo(function GenNode({
         (vModel.provider.toLowerCase().includes('seedance') ||
           vModel.provider.toLowerCase().includes('doubao')))
     const vIsGrok = vModelId.includes('grok')
-    const vStartFrame = node.settings?.manualStartFrame || getConnectedImageForInput(node.id, 'veo_start')
-    const vEndFrame = node.settings?.manualEndFrame || getConnectedImageForInput(node.id, 'veo_end')
+    const vStartFrame = storeManualStartFrame || node.settings?.manualStartFrame || getConnectedImageForInput(node.id, 'veo_start')
+    const vEndFrame = storeManualEndFrame || node.settings?.manualEndFrame || getConnectedImageForInput(node.id, 'veo_end')
     const vRatio = node.settings?.ratio || '16:9'
     const vDuration = node.settings?.duration || '5s'
     const vResolution = node.settings?.resolution || (vIsSeedance ? '720p' : '1080P')
@@ -638,44 +647,33 @@ export const GenNode = React.memo(function GenNode({
               )}
             </div>
 
-            {/* 首尾帧连接区 */}
-            {node.settings?.veoFramesMode && (vIsVeo31 || vIsSeedance) && (
+            {/* 首尾帧区域 */}
+            {(storeVeoFramesMode ?? node.settings?.veoFramesMode) && (vIsVeo31 || vIsSeedance) && (
               <div
-                className="px-3 pb-2 pt-2 border-t border-[var(--border-color)]"
+                className="nodrag px-3 pb-2 pt-2 border-t border-[var(--border-color)]"
                 onMouseDown={(e) => e.stopPropagation()}
+                onDragEnter={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  e.dataTransfer.dropEffect = 'copy'
+                }}
               >
                 <div className="text-[9px] text-[var(--text-muted)] font-medium mb-1.5">
                   首帧 / 尾帧
                 </div>
                 <div className="flex gap-2">
                   {/* 首帧 */}
-                  <div className="relative flex-1">
+                  <div className="flex-1">
                     <div
-                      className={`input-point ${vStartFrame ? 'connected' : ''} ${connectingTarget === node.id && connectingInputType === 'veo_start' ? 'active' : ''}`}
-                      title="首帧输入"
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
+                      className={`h-14 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer hover:border-[var(--primary-color)] transition-colors pointer-events-auto ${vStartFrame ? 'border-[var(--primary-color)]' : 'border-[var(--border-color)]'}`}
+                      onDragEnter={(e) => {
                         e.preventDefault()
-                        const world = screenToWorld(e.clientX, e.clientY)
-                        setMousePos(world)
-                        setConnectingTarget(node.id)
-                        setConnectingInputType('veo_start')
+                        e.stopPropagation()
                       }}
-                      onMouseUp={(e) => handleNodeMouseUp(node.id, e, 'veo_start')}
-                      data-input-type="veo_start"
-                      style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '-0.25rem',
-                        transform: 'translateY(-50%)',
-                        width: '0.5rem',
-                        height: '0.5rem',
-                        zIndex: 20,
-                        cursor: 'crosshair'
-                      }}
-                    />
-                    <div
-                      className={`nodrag h-14 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden ${vStartFrame ? 'border-[var(--primary-color)]' : 'border-[var(--border-color)]'}`}
                       onDragOver={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
@@ -687,6 +685,22 @@ export const GenNode = React.memo(function GenNode({
                         const assetPath = e.dataTransfer.getData('asset-path')
                         if (assetPath) {
                           updateNodeSettings(node.id, { manualStartFrame: assetPath })
+                        } else if (e.dataTransfer.files?.length > 0) {
+                          const file = e.dataTransfer.files[0]
+                          if (file.path) {
+                            updateNodeSettings(node.id, { manualStartFrame: file.path })
+                          }
+                        }
+                      }}
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (vStartFrame) return
+                        const result = await window.api.localCacheAPI.openFiles({
+                          filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }],
+                          multiple: false
+                        })
+                        if (result.success && result.paths?.length) {
+                          updateNodeSettings(node.id, { manualStartFrame: result.paths[0] })
                         }
                       }}
                     >
@@ -702,19 +716,18 @@ export const GenNode = React.memo(function GenNode({
                         >
                           <img
                             src={getXingheMediaSrc(vStartFrame)}
+                            draggable={false}
                             className="w-full h-full object-cover"
                           />
-                          {node.settings?.manualStartFrame && (
-                            <span
-                              className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-black/70 text-white flex items-center justify-center cursor-pointer pointer-events-auto hover:bg-red-500 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                updateNodeSettings(node.id, { manualStartFrame: undefined })
-                              }}
-                            >
-                              <X size={7} />
-                            </span>
-                          )}
+                          <span
+                            className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-black/70 text-white flex items-center justify-center cursor-pointer pointer-events-auto hover:bg-red-500 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              updateNodeSettings(node.id, { manualStartFrame: undefined })
+                            }}
+                          >
+                            <X size={7} />
+                          </span>
                         </div>
                       ) : (
                         <span className="text-[9px] text-[var(--text-muted)]">首帧</span>
@@ -722,33 +735,13 @@ export const GenNode = React.memo(function GenNode({
                     </div>
                   </div>
                   {/* 尾帧 */}
-                  <div className="relative flex-1">
+                  <div className="flex-1">
                     <div
-                      className={`input-point ${vEndFrame ? 'connected' : ''} ${connectingTarget === node.id && connectingInputType === 'veo_end' ? 'active' : ''}`}
-                      title="尾帧输入"
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
+                      className={`h-14 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer hover:border-emerald-500 transition-colors pointer-events-auto ${vEndFrame ? 'border-emerald-500' : 'border-[var(--border-color)]'}`}
+                      onDragEnter={(e) => {
                         e.preventDefault()
-                        const world = screenToWorld(e.clientX, e.clientY)
-                        setMousePos(world)
-                        setConnectingTarget(node.id)
-                        setConnectingInputType('veo_end')
+                        e.stopPropagation()
                       }}
-                      onMouseUp={(e) => handleNodeMouseUp(node.id, e, 'veo_end')}
-                      data-input-type="veo_end"
-                      style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '-0.25rem',
-                        transform: 'translateY(-50%)',
-                        width: '0.5rem',
-                        height: '0.5rem',
-                        zIndex: 20,
-                        cursor: 'crosshair'
-                      }}
-                    />
-                    <div
-                      className={`nodrag h-14 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden ${vEndFrame ? 'border-emerald-500' : 'border-[var(--border-color)]'}`}
                       onDragOver={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
@@ -760,6 +753,22 @@ export const GenNode = React.memo(function GenNode({
                         const assetPath = e.dataTransfer.getData('asset-path')
                         if (assetPath) {
                           updateNodeSettings(node.id, { manualEndFrame: assetPath })
+                        } else if (e.dataTransfer.files?.length > 0) {
+                          const file = e.dataTransfer.files[0]
+                          if (file.path) {
+                            updateNodeSettings(node.id, { manualEndFrame: file.path })
+                          }
+                        }
+                      }}
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (vEndFrame) return
+                        const result = await window.api.localCacheAPI.openFiles({
+                          filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }],
+                          multiple: false
+                        })
+                        if (result.success && result.paths?.length) {
+                          updateNodeSettings(node.id, { manualEndFrame: result.paths[0] })
                         }
                       }}
                     >
@@ -775,19 +784,18 @@ export const GenNode = React.memo(function GenNode({
                         >
                           <img
                             src={getXingheMediaSrc(vEndFrame)}
+                            draggable={false}
                             className="w-full h-full object-cover"
                           />
-                          {node.settings?.manualEndFrame && (
-                            <span
-                              className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-black/70 text-white flex items-center justify-center cursor-pointer pointer-events-auto hover:bg-red-500 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                updateNodeSettings(node.id, { manualEndFrame: undefined })
-                              }}
-                            >
-                              <X size={7} />
-                            </span>
-                          )}
+                          <span
+                            className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-black/70 text-white flex items-center justify-center cursor-pointer pointer-events-auto hover:bg-red-500 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              updateNodeSettings(node.id, { manualEndFrame: undefined })
+                            }}
+                          >
+                            <X size={7} />
+                          </span>
                         </div>
                       ) : (
                         <span className="text-[9px] text-[var(--text-muted)]">尾帧</span>

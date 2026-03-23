@@ -154,29 +154,31 @@ export function useGenerationManager({
     }
 
     try {
-      // Bundle images
+      // Bundle images — 串行处理避免大量 base64 同时驻留内存(OOM)
       let payloadConnectedImages = []
-      if (connectedImages.length > 0) {
-        payloadConnectedImages = await Promise.all(
-          connectedImages.map(async (img) => {
-            if (
-              (img.startsWith('http://') || img.startsWith('https://')) &&
-              !img.includes('127.0.0.1') &&
-              !img.includes('localhost')
-            ) {
-              return img
-            }
-            if (img.startsWith('data:')) return img
-            try {
-              const fetchUrl = getXingheMediaSrc(img)
-              const res = await fetch(fetchUrl)
-              return await blobToDataURL(await res.blob())
-            } catch (err) {
-              console.warn('[Generation] Failed to fetch and convert local image:', img, err)
-              return img
-            }
-          })
-        )
+      for (const img of connectedImages) {
+        if (
+          (img.startsWith('http://') || img.startsWith('https://')) &&
+          !img.includes('127.0.0.1') &&
+          !img.includes('localhost')
+        ) {
+          payloadConnectedImages.push(img)
+        } else if (img.startsWith('data:')) {
+          payloadConnectedImages.push(img)
+        } else if (img.startsWith('xinghe://') || img.startsWith('file://') || /^[A-Za-z]:[\\/]/.test(img)) {
+          // 本地路径直接传给主进程处理,避免渲染进程做 base64
+          payloadConnectedImages.push(img)
+        } else {
+          try {
+            const fetchUrl = getXingheMediaSrc(img)
+            const res = await fetch(fetchUrl)
+            const b64 = await blobToDataURL(await res.blob())
+            payloadConnectedImages.push(b64)
+          } catch (err) {
+            console.warn('[Generation] Failed to fetch and convert local image:', img, err)
+            payloadConnectedImages.push(img)
+          }
+        }
       }
 
       // Bundle videos

@@ -134,6 +134,27 @@ export const useAppShortcuts = ({
     }
 
     const handleKeyDown = (e) => {
+      // Save (Ctrl+S) — 即使在文本框中也应生效
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        if (handleSaveToHistory) {
+          handleSaveToHistory()
+          // 显示保存成功 toast
+          const toast = document.createElement('div')
+          toast.textContent = '✅ 项目已保存'
+          Object.assign(toast.style, {
+            position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+            padding: '8px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: '500',
+            color: '#fff', background: 'rgba(34,197,94,0.9)', zIndex: '9999',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)', transition: 'opacity 0.3s'
+          })
+          document.body.appendChild(toast)
+          setTimeout(() => { toast.style.opacity = '0' }, 1500)
+          setTimeout(() => { toast.remove() }, 1800)
+        }
+        return
+      }
+
       const target = e.target
       const isTextInput =
         target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
@@ -158,14 +179,6 @@ export const useAppShortcuts = ({
         e.preventDefault()
         const allIds = nodesRef.current.map((n) => n.id)
         useAppStore.getState().setSelectedNodeIds(new Set(allIds))
-      }
-
-      // Save (Ctrl+S)
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        if (handleSaveToHistory) {
-          handleSaveToHistory()
-        }
       }
     }
 
