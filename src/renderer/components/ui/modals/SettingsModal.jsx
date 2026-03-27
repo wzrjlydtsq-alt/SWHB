@@ -1,4 +1,13 @@
-import { Check, Trash2, Plus, LinkIcon, CheckCircle2, Loader2, Eye, EyeOff } from '../../../utils/icons.jsx'
+import {
+  Check,
+  Trash2,
+  Plus,
+  LinkIcon,
+  CheckCircle2,
+  Loader2,
+  Eye,
+  EyeOff
+} from '../../../utils/icons.jsx'
 import { DELETED_MODEL_IDS } from '../../../utils/constants.js'
 import { Button } from '../Button.jsx'
 import { Modal } from '../Modal.jsx'
@@ -26,16 +35,9 @@ export function SettingsModal({
   const [visibleKeys, setVisibleKeys] = useState(new Set())
 
   const THEME_COLORS = [
-    { name: '默认蓝', color: '#3b82f6' },
-    { name: '草绿', color: '#4CAF50' },
-    { name: '灰色', color: '#888888' },
     { name: '墨绿', color: '#0A4F30' },
-    { name: '浅蓝', color: '#7EC8E3' },
-    { name: '湖蓝', color: '#0B86C8' },
+    { name: '湖蓝', color: '#20A5DB' },
     { name: '藏蓝', color: '#003366' },
-    { name: '鹅黄', color: '#FFE66D' },
-    { name: '橘黄', color: '#F5A623' },
-    { name: '深黄', color: '#D4A017' },
     { name: '深灰', color: '#3A3A3A' },
     { name: '标色', color: '#8B5E3C' }
   ]
@@ -54,7 +56,13 @@ export function SettingsModal({
     videoSavePath,
     setVideoSavePath,
     themeColor,
-    setThemeColor
+    setThemeColor,
+    enableGpu,
+    setEnableGpu,
+    enableUpdateCheck,
+    setEnableUpdateCheck,
+    globalApiKey,
+    globalApiUrl
   } = useAppStore(
     useShallow((state) => ({
       uiScale: state.uiScale,
@@ -70,32 +78,26 @@ export function SettingsModal({
       videoSavePath: state.videoSavePath,
       setVideoSavePath: state.setVideoSavePath,
       themeColor: state.themeColor,
-      setThemeColor: state.setThemeColor
+      setThemeColor: state.setThemeColor,
+      enableGpu: state.enableGpu,
+      setEnableGpu: state.setEnableGpu,
+      enableUpdateCheck: state.enableUpdateCheck,
+      setEnableUpdateCheck: state.setEnableUpdateCheck,
+      globalApiKey: state.globalApiKey,
+      globalApiUrl: state.globalApiUrl
     }))
   )
 
-  useEffect(() => {
-    if (window.api?.invoke && imageSavePath) {
-      window.api.invoke('cache:config', { imageSavePath })
-    }
-  }, [imageSavePath])
 
   useEffect(() => {
-    if (window.api?.invoke && videoSavePath) {
-      window.api.invoke('cache:config', { videoSavePath })
+    if (!window.api?.invoke) return
+    const initConfig = {}
+    if (imageSavePath) initConfig.imageSavePath = imageSavePath
+    if (videoSavePath) initConfig.videoSavePath = videoSavePath
+    if (Object.keys(initConfig).length > 0) {
+      window.api.invoke('cache:config', initConfig)
     }
-  }, [videoSavePath])
-
-  useEffect(() => {
-    if (window.api?.invoke) {
-      const initConfig = {}
-      if (imageSavePath) initConfig.imageSavePath = imageSavePath
-      if (videoSavePath) initConfig.videoSavePath = videoSavePath
-      if (Object.keys(initConfig).length > 0) {
-        window.api.invoke('cache:config', initConfig)
-      }
-    }
-  }, [])
+  }, [imageSavePath, videoSavePath])
 
   return (
     <Modal
@@ -111,7 +113,8 @@ export function SettingsModal({
             { id: 'general', label: '🎛️ 通用' },
             { id: 'appearance', label: '🎨 外观与体验' },
             { id: 'workspace', label: '🗂️ 工作区与存储' },
-            { id: 'models', label: '🤖 模型接口配置' }
+            { id: 'models', label: '🤖 模型接口配置' },
+            { id: 'system', label: '💻 高级与系统' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -133,13 +136,12 @@ export function SettingsModal({
             <div className="p-6 space-y-8 animate-in fade-in flex flex-col">
               <section>
                 <h3 className="text-sm font-bold text-zinc-300 mb-4 pb-2 border-b border-[var(--border-color)]">
-                  分类默认接口 (API)
+                  全局默认接口 (API)
                 </h3>
                 <div className="space-y-6 max-w-xl">
-                  {/* Chat 默认接口 */}
                   <div className="p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
                     <div className="text-xs font-bold text-zinc-300 mb-3 flex items-center gap-2">
-                      💬 Chat 默认接口
+                      🔑 默认接口配置
                     </div>
                     <div className="space-y-3">
                       <div>
@@ -148,8 +150,10 @@ export function SettingsModal({
                         </label>
                         <input
                           type="text"
-                          value={useAppStore.getState().chatApiUrl}
-                          onChange={(e) => useAppStore.setState({ chatApiUrl: e.target.value.trim() })}
+                          value={globalApiUrl || ''}
+                          onChange={(e) =>
+                            useAppStore.setState({ globalApiUrl: e.target.value })
+                          }
                           className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                           placeholder="https://api.openai.com"
                         />
@@ -160,115 +164,27 @@ export function SettingsModal({
                         </label>
                         <div className="relative">
                           <input
-                            type={visibleKeys.has('chat') ? 'text' : 'password'}
-                            value={useAppStore.getState().chatApiKey}
-                            onChange={(e) => useAppStore.setState({ chatApiKey: e.target.value.trim() })}
+                            type={visibleKeys.has('global') ? 'text' : 'password'}
+                            value={globalApiKey || ''}
+                            onChange={(e) =>
+                              useAppStore.setState({ globalApiKey: e.target.value })
+                            }
                             className="w-full rounded-lg px-3 py-2 pr-9 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
                             placeholder="sk-..."
                           />
                           <button
                             type="button"
-                            onClick={() => setVisibleKeys(prev => {
-                              const next = new Set(prev)
-                              next.has('chat') ? next.delete('chat') : next.add('chat')
-                              return next
-                            })}
+                            onClick={() =>
+                              setVisibleKeys((prev) => {
+                                const next = new Set(prev)
+                                next.has('global') ? next.delete('global') : next.add('global')
+                                return next
+                              })
+                            }
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
                             tabIndex={-1}
                           >
-                            {visibleKeys.has('chat') ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Image 默认接口 */}
-                  <div className="p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                    <div className="text-xs font-bold text-zinc-300 mb-3 flex items-center gap-2">
-                      🖼️ Image 默认接口
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-xs font-medium text-zinc-500 mb-1 block">
-                          Base URL
-                        </label>
-                        <input
-                          type="text"
-                          value={useAppStore.getState().imageApiUrl}
-                          onChange={(e) => useAppStore.setState({ imageApiUrl: e.target.value.trim() })}
-                          className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
-                          placeholder="https://api.openai.com"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-zinc-500 mb-1 block">
-                          API Key
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={visibleKeys.has('image') ? 'text' : 'password'}
-                            value={useAppStore.getState().imageApiKey}
-                            onChange={(e) => useAppStore.setState({ imageApiKey: e.target.value.trim() })}
-                            className="w-full rounded-lg px-3 py-2 pr-9 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
-                            placeholder="sk-..."
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setVisibleKeys(prev => {
-                              const next = new Set(prev)
-                              next.has('image') ? next.delete('image') : next.add('image')
-                              return next
-                            })}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
-                            tabIndex={-1}
-                          >
-                            {visibleKeys.has('image') ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Video 默认接口 */}
-                  <div className="p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
-                    <div className="text-xs font-bold text-zinc-300 mb-3 flex items-center gap-2">
-                      🎞️ Video 默认接口
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-xs font-medium text-zinc-500 mb-1 block">
-                          Base URL
-                        </label>
-                        <input
-                          type="text"
-                          value={useAppStore.getState().videoApiUrl}
-                          onChange={(e) => useAppStore.setState({ videoApiUrl: e.target.value.trim() })}
-                          className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
-                          placeholder="https://api.openai.com"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-zinc-500 mb-1 block">
-                          API Key
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={visibleKeys.has('video') ? 'text' : 'password'}
-                            value={useAppStore.getState().videoApiKey}
-                            onChange={(e) => useAppStore.setState({ videoApiKey: e.target.value.trim() })}
-                            className="w-full rounded-lg px-3 py-2 pr-9 text-sm outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-200 focus:border-[var(--primary-color)]"
-                            placeholder="sk-..."
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setVisibleKeys(prev => {
-                              const next = new Set(prev)
-                              next.has('video') ? next.delete('video') : next.add('video')
-                              return next
-                            })}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
-                            tabIndex={-1}
-                          >
-                            {visibleKeys.has('video') ? <EyeOff size={14} /> : <Eye size={14} />}
+                            {visibleKeys.has('global') ? <EyeOff size={14} /> : <Eye size={14} />}
                           </button>
                         </div>
                       </div>
@@ -283,13 +199,8 @@ export function SettingsModal({
                     <button
                       onClick={() => {
                         const state = useAppStore.getState()
-                        // 持久化全局 API 配置到 SQLite
-                        state.setChatApiKey(state.chatApiKey)
-                        state.setChatApiUrl(state.chatApiUrl)
-                        state.setImageApiKey(state.imageApiKey)
-                        state.setImageApiUrl(state.imageApiUrl)
-                        state.setVideoApiKey(state.videoApiKey)
-                        state.setVideoApiUrl(state.videoApiUrl)
+                        state.setGlobalApiKey((state.globalApiKey || '').trim())
+                        state.setGlobalApiUrl((state.globalApiUrl || '').trim())
                         setGlobalSaveStatus('保存成功！')
                         setTimeout(() => setGlobalSaveStatus(''), 2000)
                       }}
@@ -299,39 +210,8 @@ export function SettingsModal({
                     </button>
                   </div>
                   <p className="text-xs text-zinc-500 mt-2 leading-relaxed bg-zinc-800/20 p-3 rounded-lg border border-[var(--border-color)]/50">
-                    分别为 Chat、Image、Video
-                    三类模型设置独立的请求网关与令牌。添加新模型时将根据类型自动使用对应配置。
+                    为所有模型设置统一的请求网关与令牌。单个模型可在「模型接口配置」中覆盖此默认值。
                   </p>
-                </div>
-              </section>
-              <section>
-                <h3 className="text-sm font-bold text-zinc-300 mb-4 pb-2 border-b border-[var(--border-color)]">
-                  特定操作
-                </h3>
-                <div className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
-                  <div className="flex-1">
-                    <label className="text-sm font-medium text-zinc-200 block">
-                      即梦图生图本地上传
-                    </label>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      开启后，调用特定模型接口时强制转换网络图片为本地表单数据上传。
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-4">
-                    <input
-                      type="checkbox"
-                      checked={jimengUseLocalFile}
-                      onChange={(e) => {
-                        const newValue = e.target.checked
-                        setJimengUseLocalFile(newValue)
-                        // 已通过 useAppConfig hook 中的 dbService 自动双写
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div
-                      className={`w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-[var(--primary-color)] peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all`}
-                    ></div>
-                  </label>
                 </div>
               </section>
             </div>
@@ -393,31 +273,67 @@ export function SettingsModal({
                   </span>
                 </div>
               </section>
+            </div>
+          )}
 
+          {activeSettingsTab === 'system' && (
+            <div className="p-6 space-y-8 animate-in fade-in">
               <section>
                 <h3 className="text-sm font-bold text-zinc-300 mb-4 pb-2 border-b border-[var(--border-color)]">
-                  动态反馈
+                  系统底层控制
                 </h3>
-                <div className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
-                  <div className="flex-1">
-                    <label className="text-sm font-medium text-zinc-200 block">
-                      节点连接线动画
+                <div className="space-y-6 max-w-xl">
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                    <div>
+                      <div className="text-sm font-medium text-zinc-200">自动检查更新</div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        每次启动软件时，自动在后台检测 GitHub 并静默下载最新版本修复包。
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={enableUpdateCheck}
+                        onChange={(e) => {
+                          const val = e.target.checked
+                          setEnableUpdateCheck(val)
+                          if (window.dbAPI?.settings) {
+                            window.dbAPI.settings.set('tapnow_enableUpdateCheck', String(val))
+                          }
+                        }}
+                      />
+                      <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--primary-color)]"></div>
                     </label>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      显示画布中节点间数据流动的脉冲动画。
-                    </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-4">
-                    <input
-                      type="checkbox"
-                      checked={showConnectionAnimations}
-                      onChange={(e) => setShowConnectionAnimations(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div
-                      className={`w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-[var(--primary-color)] peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all`}
-                    ></div>
-                  </label>
+
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)]">
+                    <div>
+                      <div className="text-sm font-medium text-zinc-200 flex items-center gap-2">
+                        硬件图形加速 (GPU)
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        大幅提升 WebGL
+                        渲染和高分辨率画布拖拽流程度。若遇到黑屏或崩溃现象，可尝试关闭。
+                        <strong className="text-yellow-500">更改需重启软件以生效。</strong>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={enableGpu}
+                        onChange={(e) => {
+                          const val = e.target.checked
+                          setEnableGpu(val)
+                          if (window.dbAPI?.settings) {
+                            window.dbAPI.settings.set('tapnow_enableGpu', String(val))
+                          }
+                        }}
+                      />
+                      <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--primary-color)]"></div>
+                    </label>
+                  </div>
                 </div>
               </section>
             </div>
@@ -512,23 +428,29 @@ export function SettingsModal({
 
               <section>
                 <h3 className="text-sm font-bold text-zinc-300 mb-4 pb-2 border-b border-[var(--border-color)]">
-                  自动保存跨度 (分钟)
+                  自动保存
                 </h3>
-                <div className="flex items-center gap-4 bg-[var(--bg-secondary)] p-4 rounded-lg border border-[var(--border-color)] max-w-sm">
-                  <span className="text-xs text-zinc-400">1m</span>
-                  <input
-                    type="range"
-                    min="1"
-                    max="30"
-                    step="1"
-                    value={autoSaveInterval}
-                    onChange={(e) => setAutoSaveInterval(Number(e.target.value))}
-                    className="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[var(--primary-color)]"
-                  />
-                  <span className="text-xs text-zinc-400">30m</span>
-                  <span className="w-8 text-right text-sm font-mono text-[var(--primary-color)]">
-                    {autoSaveInterval}
-                  </span>
+                <p className="text-xs text-zinc-500 mb-3">
+                  定时保存节点、连线、生成历史和资产库数据，防止意外丢失。
+                </p>
+                <div className="flex gap-2 max-w-sm">
+                  {[
+                    { label: '关闭', value: 0 },
+                    { label: '15 分钟', value: 15 },
+                    { label: '30 分钟', value: 30 }
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setAutoSaveInterval(opt.value)}
+                      className={`flex-1 px-4 py-2 text-sm rounded-lg border transition-colors ${
+                        autoSaveInterval === opt.value
+                          ? 'bg-[var(--primary-color)] text-white border-[var(--primary-color)]'
+                          : 'bg-[var(--bg-secondary)] text-zinc-400 border-[var(--border-color)] hover:text-zinc-200 hover:border-zinc-500'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </section>
             </div>
@@ -632,17 +554,21 @@ export function SettingsModal({
                             <input
                               type={visibleKeys.has(api.id) ? 'text' : 'password'}
                               value={api.key || ''}
-                              onChange={(e) => updateApiConfig(api.id, { key: e.target.value.trim() })}
+                              onChange={(e) =>
+                                updateApiConfig(api.id, { key: e.target.value.trim() })
+                              }
                               className="w-full rounded-lg px-3 py-2 pr-9 text-xs outline-none transition-colors border font-mono bg-[var(--bg-base)] border-[var(--border-color)] text-zinc-300 focus:border-[var(--primary-color)]"
                               placeholder="留空使用分类默认 Key"
                             />
                             <button
                               type="button"
-                              onClick={() => setVisibleKeys(prev => {
-                                const next = new Set(prev)
-                                next.has(api.id) ? next.delete(api.id) : next.add(api.id)
-                                return next
-                              })}
+                              onClick={() =>
+                                setVisibleKeys((prev) => {
+                                  const next = new Set(prev)
+                                  next.has(api.id) ? next.delete(api.id) : next.add(api.id)
+                                  return next
+                                })
+                              }
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
                               tabIndex={-1}
                             >

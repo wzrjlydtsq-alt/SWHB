@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ThumbnailImage } from './ThumbnailImage.jsx'
 import {
@@ -24,14 +24,17 @@ const CATEGORIES = [
   { id: 'audio', label: '音频', icon: Music }
 ]
 
-const STORAGE_KEY = 'tapnow_asset_library'
-
 // 新格式：每个分类 { folders: [...], items: [...] }
 const EMPTY_CATEGORY = { folders: [], items: [] }
 
-function loadAssets() {
+function getStorageKey(projectId) {
+  return projectId ? `tapnow_asset_library_${projectId}` : 'tapnow_asset_library'
+}
+
+function loadAssets(projectId) {
   try {
-    const data = localStorage.getItem(STORAGE_KEY)
+    const key = getStorageKey(projectId)
+    const data = localStorage.getItem(key)
     if (!data) {
       return {
         characters: { ...EMPTY_CATEGORY },
@@ -69,15 +72,18 @@ function loadAssets() {
   }
 }
 
-function saveAssets(assets) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(assets))
+function saveAssets(projectId, assets) {
+  const key = getStorageKey(projectId)
+  localStorage.setItem(key, JSON.stringify(assets))
 }
 
 export function AssetLibrary() {
   const assetLibraryOpen = useAppStore((state) => state.assetLibraryOpen)
   const setAssetLibraryOpen = useAppStore((state) => state.setAssetLibraryOpen)
+  const currentProject = useAppStore((state) => state.currentProject)
+
   const [activeCategory, setActiveCategory] = useState('characters')
-  const [assets, setAssets] = useState(loadAssets)
+  const [assets, setAssets] = useState(() => loadAssets(currentProject?.id))
   const [openFolderId, setOpenFolderId] = useState(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -85,14 +91,26 @@ export function AssetLibrary() {
   const [renameValue, setRenameValue] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
   const [dragOverFolderId, setDragOverFolderId] = useState(null)
+  const [isDragOverPanel, setIsDragOverPanel] = useState(false)
+
+  const prevProjectRef = useRef(currentProject?.id)
 
   useEffect(() => {
-    saveAssets(assets)
-  }, [assets])
+    if (prevProjectRef.current !== currentProject?.id) {
+      // 发生项目切换：重新加载新项目资产，并阻断保存老数据
+      prevProjectRef.current = currentProject?.id
+      setAssets(loadAssets(currentProject?.id))
+      setOpenFolderId(null)
+      return
+    }
+    // 未发生项目切换：正常持久化当前状态
+    saveAssets(currentProject?.id, assets)
+  }, [assets, currentProject?.id])
 
   // 监听外部添加资产事件（OutputResultsPanel 通过 localStorage 直接写入后会触发此事件）
   useEffect(() => {
-    const handleExternalUpdate = () => setAssets(loadAssets())
+    const handleExternalUpdate = () =>
+      setAssets(loadAssets(useAppStore.getState().currentProject?.id))
     window.addEventListener('asset-library-updated', handleExternalUpdate)
     return () => window.removeEventListener('asset-library-updated', handleExternalUpdate)
   }, [])
@@ -106,9 +124,7 @@ export function AssetLibrary() {
   const catData = assets[activeCategory] || EMPTY_CATEGORY
 
   // 当前展开的文件夹
-  const openFolder = openFolderId
-    ? catData.folders.find((f) => f.id === openFolderId)
-    : null
+  const openFolder = openFolderId ? catData.folders.find((f) => f.id === openFolderId) : null
 
   // ========== 文件导入 ==========
   const handleImport = useCallback(async () => {
@@ -174,9 +190,7 @@ export function AssetLibrary() {
         const cat = { ...prev[activeCategory] }
         if (openFolderId) {
           cat.folders = cat.folders.map((f) =>
-            f.id === openFolderId
-              ? { ...f, items: f.items.filter((a) => a.id !== assetId) }
-              : f
+            f.id === openFolderId ? { ...f, items: f.items.filter((a) => a.id !== assetId) } : f
           )
         } else {
           cat.items = cat.items.filter((a) => a.id !== assetId)
@@ -227,9 +241,7 @@ export function AssetLibrary() {
       if (!name) return
       setAssets((prev) => {
         const cat = { ...prev[activeCategory] }
-        cat.folders = cat.folders.map((f) =>
-          f.id === folderId ? { ...f, name } : f
-        )
+        cat.folders = cat.folders.map((f) => (f.id === folderId ? { ...f, name } : f))
         return { ...prev, [activeCategory]: cat }
       })
       setRenamingFolderId(null)
@@ -259,8 +271,10 @@ export function AssetLibrary() {
   )
 
   // ========== 外部文件拖入 ==========
+  // 使用与 ReactFlowCanvas 相同的策略：IPC cache:copy-file → xinghe:// URL
+  // 失败则 FileReader + cache:save-cache 降级；不再直接依赖 file.path 展示
   const handleExternalFileDrop = useCallback(
-    (e) => {
+    async (e, targetFolderId) => {
       e.preventDefault()
       e.stopPropagation()
       const files = e.dataTransfer?.files
@@ -269,18 +283,60 @@ export function AssetLibrary() {
       const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg']
       const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
       const videoExts = ['mp4', 'webm', 'mov']
-
+      const fileArray = Array.from(files)
       const newAssets = []
-      for (const file of files) {
-        const filePath = file.path
-        if (!filePath) continue
-        const name = filePath.split(/[/\\]/).pop() || filePath
+
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i]
+        const name = file.name || 'unknown'
         const ext = name.split('.').pop()?.toLowerCase() || ''
 
-        // 按当前分类过滤文件类型
+        // 按分类过滤类型
         if (activeCategory === 'audio' && !audioExts.includes(ext)) continue
         if ((activeCategory === 'characters' || activeCategory === 'scenes') && !imageExts.includes(ext)) continue
         if (activeCategory === 'materials' && !imageExts.includes(ext) && !videoExts.includes(ext)) continue
+
+        const cacheType = audioExts.includes(ext) ? 'audio' : 'image'
+        let finalPath = null
+
+        try {
+          // 策略一：IPC 让主进程复制文件（需要 file.path 可用）
+          if (file.path) {
+            const res = await window.api.invoke('cache:copy-file', {
+              id: `asset_${Date.now()}_${i}`,
+              sourcePath: file.path,
+              category: 'asset_library',
+              type: cacheType
+            })
+            if (res?.success && res.path) {
+              finalPath = res.path
+            }
+          }
+          // 策略二：FileReader 读取 → 主进程保存
+          if (!finalPath) {
+            const base64 = await new Promise((res, rej) => {
+              const reader = new FileReader()
+              reader.onload = (ev) => res(ev.target.result)
+              reader.onerror = rej
+              reader.readAsDataURL(file)
+            })
+            const res = await window.api.localCacheAPI.saveCache({
+              id: `asset_${Date.now()}_${i}`,
+              content: base64,
+              category: 'asset_library',
+              ext: `.${ext}`,
+              type: cacheType
+            })
+            if (res?.success && res.path) {
+              finalPath = res.path
+            }
+          }
+        } catch (err) {
+          console.error('[AssetLibrary] 处理拖入文件异常:', name, err)
+          continue
+        }
+
+        if (!finalPath) continue
 
         let type = 'application/octet-stream'
         if (imageExts.includes(ext)) type = `image/${ext === 'jpg' ? 'jpeg' : ext}`
@@ -291,18 +347,19 @@ export function AssetLibrary() {
           id: `asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name,
           type,
-          path: filePath,
+          path: finalPath,
           addedAt: Date.now()
         })
       }
 
       if (newAssets.length === 0) return
 
+      const effectiveFolderId = targetFolderId ?? openFolderId
       setAssets((prev) => {
         const cat = { ...prev[activeCategory] }
-        if (openFolderId) {
+        if (effectiveFolderId) {
           cat.folders = cat.folders.map((f) =>
-            f.id === openFolderId ? { ...f, items: [...f.items, ...newAssets] } : f
+            f.id === effectiveFolderId ? { ...f, items: [...f.items, ...newAssets] } : f
           )
         } else {
           cat.items = [...cat.items, ...newAssets]
@@ -313,11 +370,12 @@ export function AssetLibrary() {
     [activeCategory, openFolderId]
   )
 
+
   // ========== 当前显示的资产列表 ==========
   const displayItems = openFolder ? openFolder.items : catData.items
 
   // ========== 渲染资产网格项 ==========
-  const renderAssetItem = (asset, isInFolder = false) => (
+  const renderAssetItem = (asset) => (
     <div
       key={asset.id}
       data-asset-item
@@ -346,13 +404,17 @@ export function AssetLibrary() {
                 const nw = e.target.naturalWidth
                 const nh = e.target.naturalHeight
                 if (nw && nh) {
-                  const dimEl = e.target.closest('[data-asset-item]')?.querySelector('[data-dim-label]')
+                  const dimEl = e.target
+                    .closest('[data-asset-item]')
+                    ?.querySelector('[data-dim-label]')
                   if (dimEl) dimEl.textContent = `${nw}x${nh}`
                 }
               }}
             />
-            <div data-dim-label className="absolute bottom-0.5 right-0.5 bg-black/60 backdrop-blur-sm text-white text-[7px] px-1 py-0 rounded font-mono pointer-events-none border border-white/10">
-            </div>
+            <div
+              data-dim-label
+              className="absolute bottom-0.5 right-0.5 bg-black/60 backdrop-blur-sm text-white text-[7px] px-1 py-0 rounded font-mono pointer-events-none border border-white/10"
+            ></div>
           </>
         ) : asset.type?.startsWith('audio/') ? (
           <Music size={14} className="opacity-40" />
@@ -385,8 +447,24 @@ export function AssetLibrary() {
         assetLibraryOpen
           ? 'translate-y-0 opacity-100'
           : '-translate-y-full opacity-0 pointer-events-none'
-      }`}
+      } ${isDragOverPanel ? 'ring-2 ring-inset ring-[var(--primary-color)]' : ''}`}
       style={{ height: '18vh' }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'copy'
+        setIsDragOverPanel(true)
+      }}
+      onDragLeave={(e) => {
+        // 只有真正离开面板时才取消高亮（relatedTarget 不在面板内）
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          setIsDragOverPanel(false)
+        }
+      }}
+      onDrop={(e) => {
+        setIsDragOverPanel(false)
+        handleExternalFileDrop(e)
+      }}
     >
       <div className="h-full flex flex-col bg-[var(--bg-secondary)] backdrop-blur-md border-b border-[var(--border-color)] shadow-xl">
         {/* 文件夹行 + 面包屑 */}
@@ -403,9 +481,7 @@ export function AssetLibrary() {
               <ChevronRight size={12} className="text-[var(--text-muted)]" />
               <span className="text-[var(--text-primary)] font-medium">
                 {openFolder.name}
-                <span className="text-[var(--text-muted)] ml-1">
-                  ({openFolder.items.length})
-                </span>
+                <span className="text-[var(--text-muted)] ml-1">({openFolder.items.length})</span>
               </span>
             </div>
           ) : (
@@ -421,20 +497,16 @@ export function AssetLibrary() {
                   }`}
                   draggable
                   onDragStart={(e) => {
-                    const allPaths = folder.items
-                      .filter((a) => a.path)
-                      .map((a) => a.path)
-                    e.dataTransfer.setData(
-                      'asset-paths',
-                      JSON.stringify(allPaths)
-                    )
+                    const allPaths = folder.items.filter((a) => a.path).map((a) => a.path)
+                    e.dataTransfer.setData('asset-paths', JSON.stringify(allPaths))
                     e.dataTransfer.setData('asset-type', 'folder')
                     e.dataTransfer.effectAllowed = 'copy'
                   }}
                   onDragOver={(e) => {
                     e.preventDefault()
-                    e.stopPropagation()
-                    e.dataTransfer.dropEffect = 'move'
+                    // 不调用 stopPropagation，让外层面板也能感知到拖拽（用于 isDragOverPanel 高亮）
+                    const hasFiles = e.dataTransfer.types.includes('Files')
+                    e.dataTransfer.dropEffect = hasFiles ? 'copy' : 'move'
                     setDragOverFolderId(folder.id)
                   }}
                   onDragLeave={() => setDragOverFolderId(null)}
@@ -442,7 +514,13 @@ export function AssetLibrary() {
                     e.preventDefault()
                     e.stopPropagation()
                     const assetId = e.dataTransfer.getData('asset-id')
-                    if (assetId) handleDropToFolder(folder.id, assetId)
+                    if (assetId) {
+                      // 内部资产拖到文件夹
+                      handleDropToFolder(folder.id, assetId)
+                    } else if (e.dataTransfer.files?.length > 0) {
+                      // 外部文件拖入文件夹：直接传入 folder.id
+                      handleExternalFileDrop(e, folder.id)
+                    }
                     setDragOverFolderId(null)
                   }}
                   onClick={() => setOpenFolderId(folder.id)}
@@ -464,10 +542,7 @@ export function AssetLibrary() {
                     />
                   ) : (
                     <>
-                      <FolderPlus
-                        size={12}
-                        className="text-[var(--text-muted)] shrink-0"
-                      />
+                      <FolderPlus size={12} className="text-[var(--text-muted)] shrink-0" />
                       <span className="text-[10px] font-medium text-[var(--text-primary)] max-w-[60px] truncate">
                         {folder.name}
                       </span>
@@ -506,10 +581,7 @@ export function AssetLibrary() {
               {/* 新建文件夹 */}
               {creatingFolder ? (
                 <div className="flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--primary-color)]/50 bg-[var(--bg-base)] shrink-0">
-                  <FolderPlus
-                    size={12}
-                    className="text-[var(--primary-color)] shrink-0"
-                  />
+                  <FolderPlus size={12} className="text-[var(--primary-color)] shrink-0" />
                   <input
                     autoFocus
                     value={newFolderName}
@@ -548,12 +620,6 @@ export function AssetLibrary() {
         {/* 资产展示区 */}
         <div
           className="flex-1 overflow-y-auto custom-scrollbar p-3 min-h-0"
-          onDragOver={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            e.dataTransfer.dropEffect = 'copy'
-          }}
-          onDrop={handleExternalFileDrop}
         >
           {displayItems.length === 0 ? (
             <div
@@ -575,7 +641,7 @@ export function AssetLibrary() {
                 onClick={handleImport}
                 className="flex flex-col items-center justify-center p-1.5 rounded-lg border-2 border-dashed border-[var(--border-color)] hover:border-[var(--primary-color)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer aspect-square"
               >
-              <Plus size={18} className="text-[var(--text-muted)]" />
+                <Plus size={18} className="text-[var(--text-muted)]" />
               </div>
             </div>
           )}
@@ -586,8 +652,7 @@ export function AssetLibrary() {
           {CATEGORIES.map((cat) => {
             const catInfo = assets[cat.id]
             const totalCount = catInfo
-              ? catInfo.items.length +
-                catInfo.folders.reduce((s, f) => s + f.items.length, 0)
+              ? catInfo.items.length + catInfo.folders.reduce((s, f) => s + f.items.length, 0)
               : 0
             return (
               <button
@@ -627,27 +692,28 @@ export function AssetLibrary() {
       </div>
 
       {/* 大图预览弹窗 - 用 portal 渲染到 body 避免父 transform 影响 fixed 定位 */}
-      {previewUrl && createPortal(
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          onClick={() => setPreviewUrl(null)}
-        >
-          <div className="relative max-w-[80vw] max-h-[80vh]">
-            <img
-              src={previewUrl}
-              alt="preview"
-              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
-            />
-            <button
-              onClick={() => setPreviewUrl(null)}
-              className="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-red-500 transition-colors"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+      {previewUrl &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setPreviewUrl(null)}
+          >
+            <div className="relative max-w-[80vw] max-h-[80vh]">
+              <img
+                src={previewUrl}
+                alt="preview"
+                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              />
+              <button
+                onClick={() => setPreviewUrl(null)}
+                className="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-red-500 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

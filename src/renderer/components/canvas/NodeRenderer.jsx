@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useRef, useMemo } from 'react'
 import { NodeWrapper } from './NodeWrapper.jsx'
 import { useCanvasContext } from '../../contexts/CanvasContext.jsx'
 import { useShallow } from 'zustand/react/shallow'
@@ -6,8 +6,20 @@ import { useAppStore } from '../../store/useAppStore.js'
 
 import { getNodeConfig } from '../../utils/nodeRegistry.js'
 
+// 节点类型 → API Key 分类
+const NODE_TYPE_CATEGORY = {
+  'gen-image': 'Image',
+  'gen-video': 'Video',
+  'alchemy-node': 'Chat',
+  'agent-node': 'Chat',
+  'novel-input': 'Chat',
+  'director-node': 'Chat'
+}
+
 export const NodeRenderer = React.memo(function NodeRenderer({ node }) {
   const contextVars = useCanvasContext()
+
+  // 仅订阅 setter 函数（稳定引用，不触发重渲染）和少量需要触发渲染的状态
   const zustandVars = useAppStore(
     useShallow((state) => ({
       isPerformanceMode: state.isPerformanceMode,
@@ -20,34 +32,19 @@ export const NodeRenderer = React.memo(function NodeRenderer({ node }) {
       setNodes: state.setNodes
     }))
   )
-  const stableStore = useAppStore.getState()
-  const allVars = {
-    ...contextVars,
-    ...zustandVars,
-    connections: [],
-    apiConfigs: stableStore.apiConfigs,
-    chatApiKey: stableStore.chatApiKey,
-    imageApiKey: stableStore.imageApiKey,
-    videoApiKey: stableStore.videoApiKey,
-    chatApiUrl: stableStore.chatApiUrl,
-    imageApiUrl: stableStore.imageApiUrl,
-    videoApiUrl: stableStore.videoApiUrl,
-    characterLibrary: stableStore.characterLibrary
-  }
 
-  const {
-    isPerformanceMode,
-    deleteNode,
-    setResizingNodeId,
-    screenToWorld,
-    setMousePos,
-    handleDrop,
-    handleDragOver,
-    handleDragLeave,
-    nodesMap
-  } = allVars
+  // 低频变化的 store 数据：用 useShallow selector 代替 getState()
+  // 这样当 apiConfigs 等变化时能正确触发重渲染
+  const storeData = useAppStore(
+    useShallow((state) => ({
+      apiConfigs: state.apiConfigs,
+      globalApiKey: state.globalApiKey,
+      globalApiUrl: state.globalApiUrl,
+      characterLibrary: state.characterLibrary
+    }))
+  )
 
-  // Derived boolean selectors
+  // 布尔选择器 — 精确订阅，只在值变化时触发渲染
   const isSelected = useAppStore(
     (state) => state.selectedNodeId === node.id || state.selectedNodeIds.has(node.id)
   )
@@ -56,63 +53,83 @@ export const NodeRenderer = React.memo(function NodeRenderer({ node }) {
     (state) =>
       state.isDragging && (state.dragNodeId === node.id || state.selectedNodeIds.has(node.id))
   )
+  const selectedNodeId = useAppStore((state) => state.selectedNodeId)
 
-  const commonProps = {
-    node,
-    isSelected,
-    isPerformanceMode,
-    isConnected: false,
-    isHoverTarget,
-    isDragging: isDragging && !isPerformanceMode,
-    selectedNodeId: useAppStore.getState().selectedNodeId,
-    apiConfigs: allVars.apiConfigs,
-    nodesMap,
+  // 从 Context 解构（稳定引用）
+  const {
     deleteNode,
     setResizingNodeId,
     screenToWorld,
-    setMousePos,
     handleDrop,
     handleDragOver,
     handleDragLeave,
-    activeShot: allVars.activeShot,
-    setActiveShot: allVars.setActiveShot,
-    getDefaultDurationForModel: allVars.getDefaultDurationForModel,
-    getDefaultDurationsForModel: allVars.getDefaultDurationsForModel,
-    onDelete: deleteNode
-  }
+    nodesMap,
+    activeShot,
+    setActiveShot,
+    getDefaultDurationForModel,
+    getDefaultDurationsForModel,
+    handleAutoExtractKeyframes
+  } = contextVars
 
-  const renderContent = () => {
-    const config = getNodeConfig(node.type)
-    const Component = config.component
+  // 稳定化 commonProps — 使用 useMemo 避免每次渲染创建新对象
+  const commonProps = useMemo(
+    () => ({
+      node,
+      isSelected,
+      isPerformanceMode: zustandVars.isPerformanceMode,
+      isConnected: false,
+      isHoverTarget,
+      isDragging: isDragging && !zustandVars.isPerformanceMode,
+      selectedNodeId,
+      apiConfigs: storeData.apiConfigs,
+      nodesMap,
+      deleteNode,
+      setResizingNodeId,
+      screenToWorld,
+      setMousePos: zustandVars.setMousePos,
+      handleDrop,
+      handleDragOver,
+      handleDragLeave,
+      activeShot,
+      setActiveShot,
+      getDefaultDurationForModel,
+      getDefaultDurationsForModel,
+      onDelete: deleteNode
+    }),
+    [
+      node,
+      isSelected,
+      zustandVars.isPerformanceMode,
+      isHoverTarget,
+      isDragging,
+      selectedNodeId,
+      storeData.apiConfigs,
+      nodesMap,
+      deleteNode,
+      setResizingNodeId,
+      screenToWorld,
+      zustandVars.setMousePos,
+      handleDrop,
+      handleDragOver,
+      handleDragLeave,
+      activeShot,
+      setActiveShot,
+      getDefaultDurationForModel,
+      getDefaultDurationsForModel
+    ]
+  )
 
-    if (!Component) {
-      return <div className="p-4 text-xs text-zinc-500">Unknown node type: {node.type}</div>
-    }
+  // 稳定化 nodeComponentProps
+  const nodeComponentProps = useMemo(() => {
+    const globalApiKey = storeData.globalApiKey
+    const globalApiUrl = storeData.globalApiUrl
 
-    // Map node types to API key categories
-    const nodeTypeToCategory = {
-      'gen-image': 'Image',
-      'gen-video': 'Video',
-      'alchemy-node': 'Chat',
-      'agent-node': 'Chat',
-      'novel-input': 'Chat'
-    }
-    const category = nodeTypeToCategory[node.type] || 'Chat'
-    const globalApiKey =
-      category === 'Video'
-        ? allVars.videoApiKey
-        : category === 'Image'
-          ? allVars.imageApiKey
-          : allVars.chatApiKey
-    const globalApiUrl =
-      category === 'Video'
-        ? allVars.videoApiUrl
-        : category === 'Image'
-          ? allVars.imageApiUrl
-          : allVars.chatApiUrl
-
-    const nodeComponentProps = {
-      ...allVars,
+    return {
+      ...contextVars,
+      ...zustandVars,
+      connections: [],
+      apiConfigs: storeData.apiConfigs,
+      characterLibrary: storeData.characterLibrary,
       node,
       deleteNode,
       globalApiKey,
@@ -120,15 +137,26 @@ export const NodeRenderer = React.memo(function NodeRenderer({ node }) {
       connectedImages: [],
       allPreviewImages: [],
       isExtractingKeyframes: node.extractingFrames,
-      handleExtractKeyframes: allVars.handleAutoExtractKeyframes
+      handleExtractKeyframes: handleAutoExtractKeyframes
     }
+  }, [contextVars, zustandVars, storeData, node, deleteNode, handleAutoExtractKeyframes])
 
+  const config = getNodeConfig(node.type)
+  const Component = config.component
+
+  if (!Component) {
     return (
-      <Suspense fallback={<div className="p-4 text-xs text-zinc-400 animate-pulse">加载中...</div>}>
-        <Component {...nodeComponentProps} />
-      </Suspense>
+      <NodeWrapper {...commonProps}>
+        <div className="p-4 text-xs text-zinc-500">Unknown node type: {node.type}</div>
+      </NodeWrapper>
     )
   }
 
-  return <NodeWrapper {...commonProps}>{renderContent()}</NodeWrapper>
+  return (
+    <NodeWrapper {...commonProps}>
+      <Suspense fallback={<div className="p-4 text-xs text-zinc-400 animate-pulse">加载中...</div>}>
+        <Component {...nodeComponentProps} />
+      </Suspense>
+    </NodeWrapper>
+  )
 })

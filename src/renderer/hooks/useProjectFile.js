@@ -7,7 +7,7 @@ import {
   getBase64FromUrl,
   isVideoUrl
 } from '../utils/projectUtils.js'
-import { getSettingJSON, setSettingJSON } from '../services/dbService.js'
+import { getSettingJSON, setSettingJSON, setSetting } from '../services/dbService.js'
 
 /**
  * 管理项目的保存、加载、导入导出及历史记录。
@@ -59,21 +59,43 @@ export const useProjectFile = ({
       async () => {
         try {
           const { nodes: n, connections: c, projectName: pName } = latestDataRef.current
-          // 直接通过 SQLite 批量保存，不再塞入 settings
+          // 保存节点和连线到 SQLite
           if (window.dbAPI?.nodes?.saveBatch && n.length > 0) {
             await window.dbAPI.nodes.saveBatch(n, currentProject.id)
           }
           if (window.dbAPI?.connections?.saveBatch && c.length > 0) {
             await window.dbAPI.connections.saveBatch(c, currentProject.id)
           }
-          // 只更新项目元数据（不含data）
+
+          // 保存生成历史到 SQLite（按项目隔离）
+          const history = useAppStore.getState().history
+          if (window.dbAPI?.settings && Array.isArray(history) && history.length > 0) {
+            const historyKey = `tapnow_history_v2_${currentProject.id}`
+            await window.dbAPI.settings
+              .set(historyKey, JSON.stringify(history))
+              .catch(() => {})
+          }
+
+          // 保存资产库到 localStorage（已有实时写入，这里做兜底）
+          const assetData = localStorage.getItem('tapnow_asset_library')
+          if (assetData && window.dbAPI?.settings) {
+            await window.dbAPI.settings.set('tapnow_asset_library', assetData).catch(() => {})
+          }
+
+          // 更新项目元数据
           setProjects((prev) => {
             const idx = prev.findIndex((p) => p.id === currentProject.id)
             if (idx === -1) return prev
             const next = [...prev]
-            next[idx] = { ...next[idx], name: pName || next[idx].name, updatedAt: new Date().toISOString() }
+            next[idx] = {
+              ...next[idx],
+              name: pName || next[idx].name,
+              updatedAt: new Date().toISOString()
+            }
             return next
           })
+
+          console.log('[自动保存] 完成')
         } catch (e) {
           console.error('[自动保存] 失败:', e)
         }
@@ -93,7 +115,11 @@ export const useProjectFile = ({
         const idx = prev.findIndex((p) => p.id === currentProject.id)
         if (idx === -1) return prev
         const next = [...prev]
-        next[idx] = { ...next[idx], name: pName || next[idx].name, updatedAt: new Date().toISOString() }
+        next[idx] = {
+          ...next[idx],
+          name: pName || next[idx].name,
+          updatedAt: new Date().toISOString()
+        }
         try {
           setSettingJSON('tapnow_projects', next)
         } catch (e) {
@@ -110,36 +136,52 @@ export const useProjectFile = ({
   // ========== SQLite 核心持久化 ==========
 
   /**
-   * 从 SQLite 加载节点
+   * 从 SQLite 加载节点和连接
    */
   const loadFromDatabase = useCallback(async () => {
-    if (!window.dbAPI?.nodes?.list || !currentProject) return
+    if (!currentProject) return
     try {
-      const dbNodes = await window.dbAPI.nodes.list(currentProject.id)
-      if (dbNodes && dbNodes.length > 0) {
-        const mappedNodes = dbNodes.map((dbNode) => {
-          let parsedContent = dbNode.content
-          try {
-            if (
-              typeof dbNode.content === 'string' &&
-              (dbNode.content.startsWith('{') || dbNode.content.startsWith('['))
-            ) {
-              parsedContent = JSON.parse(dbNode.content)
+      // 加载节点（无论有没有数据都要重置画布）
+      let mappedNodes = []
+      if (window.dbAPI?.nodes?.list) {
+        const dbNodes = await window.dbAPI.nodes.list(currentProject.id)
+        if (dbNodes && dbNodes.length > 0) {
+          mappedNodes = dbNodes.map((dbNode) => {
+            let parsedContent = dbNode.content
+            try {
+              if (
+                typeof dbNode.content === 'string' &&
+                (dbNode.content.startsWith('{') || dbNode.content.startsWith('['))
+              ) {
+                parsedContent = JSON.parse(dbNode.content)
+              }
+            } catch {
+              // Ignored
             }
-          } catch {
-            // Ignored
-          }
-          return {
-            ...dbNode,
-            content: parsedContent
-          }
-        })
-        setNodes(mappedNodes)
+            return {
+              ...dbNode,
+              content: parsedContent
+            }
+          })
+        }
       }
+      setNodes(mappedNodes)
+      console.log(`[loadFromDatabase] 加载 ${mappedNodes.length} 个节点`)
+
+      // 加载连接
+      let loadedConnections = []
+      if (window.dbAPI?.connections?.list) {
+        const dbConnections = await window.dbAPI.connections.list(currentProject.id)
+        if (dbConnections && dbConnections.length > 0) {
+          loadedConnections = dbConnections
+        }
+      }
+      setConnections(loadedConnections)
+      console.log(`[loadFromDatabase] 加载 ${loadedConnections.length} 个连接`)
     } catch (e) {
-      console.error('从 SQLite 加载节点失败:', e)
+      console.error('从 SQLite 加载项目数据失败:', e)
     }
-  }, [setNodes, currentProject])
+  }, [setNodes, setConnections, currentProject])
 
   // ========== 历史记录管理 (localStorage 快照) ==========
 
@@ -166,7 +208,10 @@ export const useProjectFile = ({
       setProjects((prev) => {
         const idx = prev.findIndex((p) => p.id === currentProject.id)
         if (idx === -1) {
-          return [{ id: currentProject.id, name, updatedAt: new Date().toISOString(), thumbnail: null }, ...prev]
+          return [
+            { id: currentProject.id, name, updatedAt: new Date().toISOString(), thumbnail: null },
+            ...prev
+          ]
         }
         const next = [...prev]
         next[idx] = { ...next[idx], name, updatedAt: new Date().toISOString() }
@@ -184,6 +229,16 @@ export const useProjectFile = ({
         createdAt: new Date().toISOString()
       })
       console.log(`[Save] 新项目 "${name}" 已创建并保存到 SQLite`)
+    }
+
+    // 持久化当前项目 ID 到 SQLite，下次启动时自动恢复
+    const activeProject = useAppStore.getState().currentProject
+    if (activeProject) {
+      try {
+        setSetting('tapnow_current_project', JSON.stringify(activeProject))
+      } catch (e) {
+        console.warn('[Save] 持久化 currentProject 失败:', e)
+      }
     }
   }, [nodes, connections, view, projectName, currentProject])
 
@@ -231,11 +286,37 @@ export const useProjectFile = ({
           if (savedView) setView(savedView)
           if (savedName) setProjectName(savedName)
 
+          // ==============================
+          // 极度关键的顺序修复：
+          // 必须在 setHistory 之前先修改当前项目 ID
+          // 否则 createHistorySlice 内部触发防抖保存时，
+          // 会使用老项目ID保存新加载的历史，导致多项目历史相互覆盖！
+          // ==============================
           useAppStore.getState().setCurrentProject({
             id: project.id,
             name: project.name,
             createdAt: project.createdAt || project.updatedAt || new Date().toISOString()
           })
+
+          // ── 加载项目专属生成历史 ──
+          if (window.dbAPI?.settings) {
+            const historyKey = `tapnow_history_v2_${project.id}`
+            const historyJson = await window.dbAPI.settings.get(historyKey)
+            if (historyJson) {
+              try {
+                const parsed = JSON.parse(historyJson)
+                if (Array.isArray(parsed)) {
+                  useAppStore.getState().setHistory(parsed)
+                  console.log(`[Load] 加载项目专属历史记录: ${parsed.length} 条`)
+                }
+              } catch (err) {
+                console.warn('[Load] 解析项目历史记录失败', err)
+              }
+            } else {
+              // 对于新项目或无历史记录的项目，清空当前历史视图
+              useAppStore.getState().setHistory([])
+            }
+          }
 
           if (setProjectListOpen) setProjectListOpen(false)
 
@@ -258,8 +339,55 @@ export const useProjectFile = ({
   const handleDeleteHistoryProject = useCallback((id) => {
     if (confirm('确定要删除此项目吗？')) {
       setProjects((prev) => prev.filter((p) => p.id !== id))
+      // 同时从 SQLite 删除节点和连接数据
+      if (window.dbAPI?.nodes?.deleteByProject) {
+        window.dbAPI.nodes.deleteByProject(id).catch((e) => console.error('删除项目节点失败:', e))
+      }
+      if (window.dbAPI?.connections?.deleteByProject) {
+        window.dbAPI.connections.deleteByProject(id).catch((e) => console.error('删除项目连接失败:', e))
+      }
     }
   }, [])
+
+  /**
+   * 保存当前项目并创建新项目
+   */
+  const handleSaveAndCreateNew = useCallback(async (closeFn) => {
+    // 1. 保存当前项目
+    await handleSaveToHistory()
+
+    // 2. 创建新项目
+    const newProjId = `proj-${Date.now()}`
+    const newProjName = '未命名项目'
+    const newProject = {
+      id: newProjId,
+      name: newProjName,
+      createdAt: new Date().toISOString()
+    }
+
+    // 3. 清空画布和历史
+    setNodes([])
+    setConnections([])
+    setProjectName(newProjName)
+    useAppStore.getState().setHistory([])
+
+    // 4. 设置新项目
+    useAppStore.getState().setCurrentProject(newProject)
+    setProjects((prev) => [
+      { id: newProjId, name: newProjName, updatedAt: new Date().toISOString(), thumbnail: null },
+      ...prev
+    ])
+
+    // 5. 持久化新项目 ID
+    try {
+      setSetting('tapnow_current_project', JSON.stringify(newProject))
+    } catch (e) {
+      console.warn('[SaveAndNew] 持久化 currentProject 失败:', e)
+    }
+
+    console.log(`[SaveAndNew] 当前项目已保存，新项目 "${newProjName}" (${newProjId}) 已创建`)
+    if (closeFn) closeFn(false)
+  }, [handleSaveToHistory, setNodes, setConnections, setProjectName])
 
   // ========== 文件导入/导出 (JSON) ==========
 
@@ -640,6 +768,7 @@ export const useProjectFile = ({
     handleSaveToHistory,
     handleLoadFromHistory,
     handleDeleteHistoryProject,
+    handleSaveAndCreateNew,
     handleSaveProject,
     handleLoadProject,
     handleSaveSelectedWorkflow

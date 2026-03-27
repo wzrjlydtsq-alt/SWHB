@@ -103,14 +103,33 @@ export function UpdaterDialog() {
         )}
 
         {updaterState.canInstall && (
-          <button
-            onClick={() => {
-              window.api.updater.quitAndInstall()
-            }}
-            className="w-full mt-2 py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium transition-colors"
-          >
-            重启并立即安装
-          </button>
+          <div className="flex flex-col gap-2 mt-2">
+            <button
+              onClick={() => {
+                window.api.updater.quitAndInstall()
+              }}
+              className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium transition-colors"
+            >
+              重启并安装（保留数据）
+            </button>
+            <button
+              onClick={() => {
+                if (
+                  confirm(
+                    '确定要清除所有本地数据吗？\n\n这将删除：\n• 所有项目数据\n• 生成的图片/视频缓存\n• 历史记录\n• 设置和配置\n\n此操作不可撤销！'
+                  )
+                ) {
+                  window.api.updater.clearAndInstall()
+                }
+              }}
+              className="w-full py-2 px-4 bg-red-600/80 hover:bg-red-500 text-white rounded font-medium transition-colors text-xs"
+            >
+              清除所有数据并安装
+            </button>
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              「清除数据」将删除本地缓存、项目、历史记录等所有数据，适用于修复异常或全新开始。
+            </p>
+          </div>
         )}
       </div>
     </div>

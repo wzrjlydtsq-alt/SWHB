@@ -9,12 +9,16 @@ const ALLOWED_CHANNELS = [
   'cache:openFiles',
   'cache:save-thumbnail',
   'cache:save-cache',
+  'cache:copy-file',
+  'clipboard:copy-image',
   'cache:check',
   'cache:delete-batch',
   'cache:clear-generated',
   'cache:clear-history',
   'cache:download-url',
   'system:show-item-in-folder',
+  'system:save-file-as',
+  'system:concat-videos',
   'engine:submit-task',
   'engine:cancel-task',
   'engine:get-status',
@@ -42,12 +46,14 @@ const ALLOWED_CHANNELS = [
   'db:settings:delete',
   'db:settings:getAll',
   'db:settings:setBatch',
+  'db:maintenance:cleanup',
   'safeStorage:isAvailable',
   'safeStorage:encrypt',
   'safeStorage:decrypt',
   'updater-check',
   'updater-download',
   'updater-quit-install',
+  'updater-clear-and-install',
   'monitor:get-stats',
   'thumbnail:generate'
 ]
@@ -120,6 +126,10 @@ function createDbAPI() {
       delete: (key) => ipcRenderer.invoke('db:settings:delete', key),
       getAll: () => ipcRenderer.invoke('db:settings:getAll'),
       setBatch: (entries) => ipcRenderer.invoke('db:settings:setBatch', entries)
+    },
+    // 数据库维护
+    maintenance: {
+      cleanup: () => ipcRenderer.invoke('db:maintenance:cleanup')
     }
   }
 }
@@ -139,7 +149,11 @@ const api = {
     deleteBatch: (data) => safeInvoke('cache:delete-batch', data),
     clearGenerated: () => safeInvoke('cache:clear-generated'),
     clearHistory: () => safeInvoke('cache:clear-history'),
-    showItemInFolder: (path) => safeInvoke('system:show-item-in-folder', path)
+    showItemInFolder: (path) => safeInvoke('system:show-item-in-folder', path),
+    saveFileAs: (sourcePath, defaultName) =>
+      safeInvoke('system:save-file-as', { sourcePath, defaultName }),
+    concatVideos: (videoPaths, outputName) =>
+      safeInvoke('system:concat-videos', { videoPaths, outputName })
   },
   engineAPI: {
     submitTask: (payload) => safeInvoke('engine:submit-task', payload),
@@ -151,7 +165,8 @@ const api = {
     onMessage: (callback) => safeOn('updater-message', callback),
     checkForUpdates: () => safeInvoke('updater-check'),
     downloadUpdate: () => safeInvoke('updater-download'),
-    quitAndInstall: () => safeInvoke('updater-quit-install')
+    quitAndInstall: () => safeInvoke('updater-quit-install'),
+    clearAndInstall: () => safeInvoke('updater-clear-and-install')
   },
   safeStorageAPI: {
     isAvailable: () => safeInvoke('safeStorage:isAvailable'),

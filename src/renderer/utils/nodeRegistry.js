@@ -9,6 +9,7 @@ const GenNode = lazy(() =>
 import { NovelInputNode } from '../components/nodes/NovelInputNode.jsx'
 import { AgentNode } from '../components/nodes/AgentNode.jsx'
 import { AlchemyNode } from '../components/nodes/AlchemyNode.jsx'
+import { DirectorNode } from '../components/nodes/DirectorNode.jsx'
 
 export const NodeRegistry = {
   'gen-image': {
@@ -35,9 +36,16 @@ export const NodeRegistry = {
     hasInputs: false,
     hasOutputs: false,
     component: AlchemyNode
+  },
+  'director-node': {
+    hasInputs: false,
+    hasOutputs: false,
+    component: DirectorNode
   }
 }
 
 export function getNodeConfig(type) {
-  return NodeRegistry[type] || { hasInputs: false, hasOutputs: false, inputCount: 0, component: null }
+  return (
+    NodeRegistry[type] || { hasInputs: false, hasOutputs: false, inputCount: 0, component: null }
+  )
 }

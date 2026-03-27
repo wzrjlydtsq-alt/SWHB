@@ -31,11 +31,10 @@ export class TaskExecutor {
       if (fs.existsSync(absolutePath)) {
         const stat = fs.statSync(absolutePath)
         if (stat.size > 20 * 1024 * 1024) {
-          console.warn(
-            `[TaskExecutor] 文件过大(${(stat.size / 1024 / 1024).toFixed(1)}MB)跳过base64:`,
-            absolutePath
+          const sizeMB = (stat.size / 1024 / 1024).toFixed(1)
+          throw new Error(
+            `参考图片过大（${sizeMB}MB），超过 20MB 上传限制。请压缩图片后重试。`
           )
-          return filePath
         }
         const buffer = await fs.promises.readFile(absolutePath)
         const ext = path.extname(absolutePath).toLowerCase().slice(1) || 'png'
@@ -241,8 +240,9 @@ export class TaskExecutor {
             if (finalImgSrc.startsWith('http') || finalImgSrc.length < 5 * 1024 * 1024) {
               reqBody.image_url = finalImgSrc
             } else {
-              console.warn(
-                '[TaskExecutor] Base64 image is too large (>5MB) for JSON body. Dropping.'
+              const sizeMB = (finalImgSrc.length / 1024 / 1024).toFixed(1)
+              throw new Error(
+                `参考图片 Base64 数据过大（约${sizeMB}MB），超过 5MB 限制。请使用更小的图片或压缩后重试。`
               )
             }
             submitBody = JSON.stringify(reqBody)

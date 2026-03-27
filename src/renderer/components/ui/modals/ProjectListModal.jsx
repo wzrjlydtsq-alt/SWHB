@@ -6,11 +6,21 @@ export function ProjectListModal({
   setProjectListOpen,
   projects,
   handleLoadFromHistory,
-  handleDeleteHistoryProject
+  handleDeleteHistoryProject,
+  handleSaveAndCreateNew
 }) {
   return (
     <Modal isOpen={projectListOpen} onClose={() => setProjectListOpen(false)} title="项目管理">
       <div className="p-4 space-y-3">
+        {/* 保存并新建按钮 */}
+        <button
+          onClick={() => handleSaveAndCreateNew(setProjectListOpen)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 bg-[var(--primary-color)] text-white hover:brightness-110 active:scale-[0.98]"
+        >
+          <span className="text-base font-bold leading-none">+</span>
+          保存当前项目并新建
+        </button>
+
         {projects.length === 0 ? (
           <div className="text-center py-8 text-[var(--text-muted)]">暂无历史项目</div>
         ) : (

@@ -10,7 +10,7 @@
 
 import { useEffect } from 'react'
 import { useAppStore } from '../store/useAppStore.js'
-import { initSettings } from '../services/dbService.js'
+import { initSettings, getSetting } from '../services/dbService.js'
 import { applyThemeColor } from '../store/slices/createUiSlice.js'
 import { getXingheMediaSrc } from '../utils/fileHelpers.js'
 
@@ -32,19 +32,24 @@ export function useAppInit() {
           if (persistData) {
             try {
               const parsed = JSON.parse(persistData)
-              const migrateMap = {
-                chatApiKey: 'tapnow_chatApiKey',
-                chatApiUrl: 'tapnow_chatApiUrl',
-                imageApiKey: 'tapnow_imageApiKey',
-                imageApiUrl: 'tapnow_imageApiUrl',
-                videoApiKey: 'tapnow_videoApiKey',
-                videoApiUrl: 'tapnow_videoApiUrl'
+              // 兼容旧版：如果存在分类 key，合并到全局（优先取 chatApiKey 作为统一值）
+              const legacyKey =
+                parsed.state?.globalApiKey ||
+                parsed.state?.chatApiKey ||
+                parsed.state?.imageApiKey ||
+                parsed.state?.videoApiKey
+              const legacyUrl =
+                parsed.state?.globalApiUrl ||
+                parsed.state?.chatApiUrl ||
+                parsed.state?.imageApiUrl ||
+                parsed.state?.videoApiUrl
+              if (legacyKey && !allSettings['tapnow_globalApiKey']) {
+                migrateEntries.push({ key: 'tapnow_globalApiKey', value: legacyKey })
+                allSettings['tapnow_globalApiKey'] = legacyKey
               }
-              for (const [stateKey, dbKey] of Object.entries(migrateMap)) {
-                if (parsed.state?.[stateKey] && !allSettings[dbKey]) {
-                  migrateEntries.push({ key: dbKey, value: parsed.state[stateKey] })
-                  allSettings[dbKey] = parsed.state[stateKey]
-                }
+              if (legacyUrl && !allSettings['tapnow_globalApiUrl']) {
+                migrateEntries.push({ key: 'tapnow_globalApiUrl', value: legacyUrl })
+                allSettings['tapnow_globalApiUrl'] = legacyUrl
               }
               if (migrateEntries.length > 0) {
                 await window.dbAPI.settings.setBatch(migrateEntries)
@@ -58,33 +63,39 @@ export function useAppInit() {
           }
 
           // 从 SQLite 恢复到 Zustand
-          if (allSettings['tapnow_chatApiKey'] && !state.chatApiKey)
-            updates.chatApiKey = allSettings['tapnow_chatApiKey']
-          if (allSettings['tapnow_chatApiUrl'] && !state.chatApiUrl)
-            updates.chatApiUrl = allSettings['tapnow_chatApiUrl']
-          if (allSettings['tapnow_imageApiKey'] && !state.imageApiKey)
-            updates.imageApiKey = allSettings['tapnow_imageApiKey']
-          if (allSettings['tapnow_imageApiUrl'] && !state.imageApiUrl)
-            updates.imageApiUrl = allSettings['tapnow_imageApiUrl']
-          if (allSettings['tapnow_videoApiKey'] && !state.videoApiKey)
-            updates.videoApiKey = allSettings['tapnow_videoApiKey']
-          if (allSettings['tapnow_videoApiUrl'] && !state.videoApiUrl)
-            updates.videoApiUrl = allSettings['tapnow_videoApiUrl']
+          if (allSettings['tapnow_globalApiKey'] && !state.globalApiKey)
+            updates.globalApiKey = allSettings['tapnow_globalApiKey']
+          if (allSettings['tapnow_globalApiUrl'] && !state.globalApiUrl)
+            updates.globalApiUrl = allSettings['tapnow_globalApiUrl']
+
+          if (allSettings['tapnow_enableGpu'] !== undefined) {
+            updates.enableGpu = allSettings['tapnow_enableGpu'] !== 'false'
+          }
+          if (allSettings['tapnow_enableUpdateCheck'] !== undefined) {
+            updates.enableUpdateCheck = allSettings['tapnow_enableUpdateCheck'] !== 'false'
+          }
 
           if (Object.keys(updates).length > 0) {
             useAppStore.setState(updates)
           }
 
-          // ── 从 SQLite 加载 history ──
+          // ── 从 SQLite 加载 history (按当前项目隔离) ──
           let historyLoaded = false
-          const historyJson = allSettings['tapnow_history_v2']
+          const projectId = state.currentProject?.id
+          const projectHistoryKey = projectId
+            ? `tapnow_history_v2_${projectId}`
+            : 'tapnow_history_v2'
+          const historyJson = allSettings[projectHistoryKey] || allSettings['tapnow_history_v2']
+
           if (historyJson) {
             try {
               const parsed = JSON.parse(historyJson)
               if (Array.isArray(parsed) && parsed.length > 0) {
                 useAppStore.getState().setHistory(parsed)
                 historyLoaded = true
-                console.log(`[App] 从 SQLite 加载 ${parsed.length} 条历史记录`)
+                console.log(
+                  `[App] 从 SQLite 加载 ${parsed.length} 条历史记录 (key: ${projectHistoryKey})`
+                )
               }
             } catch {
               console.warn('[App] 解析 SQLite history 失败')
@@ -145,5 +156,8 @@ export function useAppInit() {
 
     // 4. 初始化 API 配置
     useAppStore.getState().initializeConfigs()
+
+    // 5. 不再自动恢复上次项目 — 始终从首页欢迎页开始
+    // 用户可在欢迎页选择项目进入画布
   }, [])
 }

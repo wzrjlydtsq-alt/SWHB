@@ -25,3 +25,13 @@ test_*.js
 test_*.mjs
 btc.txt
 eth.txt
+
+# Backup files
+*.bak
+
+# Database WAL/SHM
+*.db-shm
+*.db-wal
+
+# IDE metadata
+.vs/

@@ -123,7 +123,11 @@ export function setSetting(key, value) {
 
   // 同步更新缓存和 localStorage
   if (_cache) _cache[key] = strValue
-  localStorage.setItem(key, strValue)
+  try {
+    localStorage.setItem(key, strValue)
+  } catch (e) {
+    console.warn(`[dbService] localStorage 写入失败 (${key}):`, e.message)
+  }
 
   // 异步写 SQLite（fire and forget）
   if (window.dbAPI?.settings) {

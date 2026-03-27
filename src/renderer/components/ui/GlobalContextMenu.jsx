@@ -1,6 +1,21 @@
 export const GlobalContextMenu = ({ contextMenu, setContextMenu, addNode }) => {
   if (!contextMenu.visible) return null
 
+  const handleCreate = (type) => {
+    addNode(
+      type,
+      contextMenu.worldX,
+      contextMenu.worldY,
+      contextMenu.sourceNodeId,
+      undefined,
+      undefined,
+      contextMenu.targetNodeId,
+      contextMenu.inputType
+    )
+    // 创建后立即关闭菜单
+    setContextMenu((prev) => ({ ...prev, visible: false }))
+  }
+
   return (
     <div
       className={`fixed z-50 w-28 rounded-lg shadow-xl border ${'bg-[#18181b] border-zinc-800'}`}
@@ -18,18 +33,7 @@ export const GlobalContextMenu = ({ contextMenu, setContextMenu, addNode }) => {
           <button
             key={item.type}
             className={`w-full text-left px-3 py-2 text-xs rounded transition-colors ${'text-zinc-300 hover:bg-zinc-800'}`}
-            onClick={() =>
-              addNode(
-                item.type,
-                contextMenu.worldX,
-                contextMenu.worldY,
-                contextMenu.sourceNodeId,
-                undefined,
-                undefined,
-                contextMenu.targetNodeId,
-                contextMenu.inputType
-              )
-            }
+            onClick={() => handleCreate(item.type)}
           >
             {item.label}
           </button>

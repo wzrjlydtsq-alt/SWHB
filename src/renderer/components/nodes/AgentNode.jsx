@@ -158,7 +158,11 @@ export const AgentNode = ({
               ? '运行中'
               : node.settings?.status === 'idle'
                 ? '空闲'
-                : node.settings?.status}
+                : node.settings?.status === 'completed'
+                  ? '已完成'
+                  : node.settings?.status === 'error' || node.settings?.status === 'failed'
+                    ? '失败'
+                    : node.settings?.status || '空闲'}
           </span>
           <button
             onClick={(e) => {

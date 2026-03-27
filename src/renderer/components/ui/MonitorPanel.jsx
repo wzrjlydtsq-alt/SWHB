@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSystemMonitor } from '../../hooks/useSystemMonitor.js'
 import { X, Activity } from '../../utils/icons.jsx'
 
@@ -20,14 +21,9 @@ function formatUptime(ms) {
   return `${s}s`
 }
 
-function formatPlatform(platform) {
-  const map = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' }
-  return map[platform] || platform
-}
-
 // ========== 子组件 ==========
 
-function StatCard({ label, value, sub, color = 'blue', icon }) {
+function StatCard({ label, value, sub, color = 'blue' }) {
   const colorMap = {
     blue: 'from-blue-500/20 to-blue-600/5 border-blue-500/30',
     green: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/30',
@@ -53,7 +49,6 @@ function StatCard({ label, value, sub, color = 'blue', icon }) {
         <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
           {label}
         </span>
-        {icon && <span className={`${textColorMap[color]} opacity-60`}>{icon}</span>}
       </div>
       <div className={`text-lg font-bold font-mono ${textColorMap[color]}`}>{value}</div>
       {sub && <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{sub}</div>}
@@ -102,10 +97,100 @@ function TableRow({ label, value }) {
   )
 }
 
+function CleanupButton({ onClick, loading, label, result }) {
+  return (
+    <div>
+      <button
+        onClick={onClick}
+        disabled={loading}
+        className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${
+          loading
+            ? 'bg-white/5 text-[var(--text-muted)] border-white/10 cursor-wait'
+            : 'bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20 hover:border-orange-500/30 active:scale-[0.98]'
+        }`}
+      >
+        {loading ? '清理中...' : label}
+      </button>
+      {result && (
+        <div
+          className={`mt-1.5 p-2 rounded-lg text-[11px] ${
+            result.error
+              ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+          }`}
+        >
+          {result.error ? `失败: ${result.error}` : result.message}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ========== 主面板 ==========
 
 export function MonitorPanel({ open, onClose }) {
   const { stats, loading, error } = useSystemMonitor(open)
+  const [showDev, setShowDev] = useState(false)
+
+  // 清理状态
+  const [cleaningCache, setCleaningCache] = useState(false)
+  const [cacheResult, setCacheResult] = useState(null)
+  const [cleaningDb, setCleaningDb] = useState(false)
+  const [dbResult, setDbResult] = useState(null)
+  const [cleaningHistory, setCleaningHistory] = useState(false)
+  const [historyResult, setHistoryResult] = useState(null)
+
+  const handleClearCache = async () => {
+    if (cleaningCache) return
+    setCleaningCache(true)
+    setCacheResult(null)
+    try {
+      const result = await window.api.clearGenerated()
+      setCacheResult({
+        message: `✅ 已清理 ${result.deletedFiles} 个文件，释放 ${formatBytes(result.freedBytes)}`
+      })
+      setTimeout(() => setCacheResult(null), 5000)
+    } catch (e) {
+      setCacheResult({ error: e.message })
+    } finally {
+      setCleaningCache(false)
+    }
+  }
+
+  const handleCleanupDb = async () => {
+    if (cleaningDb) return
+    setCleaningDb(true)
+    setDbResult(null)
+    try {
+      const result = await window.dbAPI.maintenance.cleanup()
+      setDbResult({
+        message: `✅ 已清理 ${result.deletedNodes} 个孤儿节点，${result.deletedConnections} 个孤儿连接`
+      })
+      setTimeout(() => setDbResult(null), 5000)
+    } catch (e) {
+      setDbResult({ error: e.message })
+    } finally {
+      setCleaningDb(false)
+    }
+  }
+
+  const handleClearHistory = async () => {
+    if (cleaningHistory) return
+    if (!confirm('确认清除所有生成历史记录？此操作不可恢复。')) return
+    setCleaningHistory(true)
+    setHistoryResult(null)
+    try {
+      const result = await window.api.clearHistory()
+      setHistoryResult({
+        message: `✅ 已清除 ${result.changes || 0} 条历史记录`
+      })
+      setTimeout(() => setHistoryResult(null), 5000)
+    } catch (e) {
+      setHistoryResult({ error: e.message })
+    } finally {
+      setCleaningHistory(false)
+    }
+  }
 
   return (
     <>
@@ -128,7 +213,7 @@ export function MonitorPanel({ open, onClose }) {
                 <Activity size={18} className="text-emerald-400" />
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               </div>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">系统监控仪表盘</h2>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">系统监控</h2>
             </div>
             <button
               onClick={onClose}
@@ -154,115 +239,34 @@ export function MonitorPanel({ open, onClose }) {
 
             {stats && (
               <>
-                {/* 系统概览 */}
-                <SectionTitle>系统概览</SectionTitle>
+                {/* 应用状态 */}
+                <SectionTitle>应用状态</SectionTitle>
                 <div className="grid grid-cols-2 gap-2">
-                  <StatCard
-                    label="操作系统"
-                    value={formatPlatform(stats.system?.platform)}
-                    sub={`${stats.system?.arch} · ${stats.system?.osVersion}`}
-                    color="blue"
-                  />
                   <StatCard
                     label="运行时长"
                     value={formatUptime(stats.process?.uptime)}
-                    sub={`PID: ${stats.process?.pid}`}
                     color="green"
                   />
-                </div>
-
-                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 mt-2">
-                  <TableRow label="Electron" value={`v${stats.system?.electronVersion}`} />
-                  <TableRow label="Node.js" value={`v${stats.system?.nodeVersion}`} />
-                  <TableRow label="Chromium" value={`v${stats.system?.chromeVersion}`} />
-                  <TableRow label="V8" value={`v${stats.system?.v8Version}`} />
-                  <TableRow
-                    label="CPU"
-                    value={`${stats.system?.cpuModel?.split('@')[0]?.trim()}`}
-                  />
-                  <TableRow label="CPU 核心" value={`${stats.system?.cpuCores} 核`} />
-                </div>
-
-                {/* 资源监控 */}
-                <SectionTitle>进程资源</SectionTitle>
-                <div className="grid grid-cols-2 gap-2">
                   <StatCard
-                    label="内存 (RSS)"
+                    label="内存占用"
                     value={formatBytes(stats.process?.rss)}
-                    sub={`总计 ${formatBytes(stats.system?.totalMemory)}`}
+                    sub={`系统 ${(
+                      ((stats.system?.totalMemory - stats.system?.freeMemory) /
+                        stats.system?.totalMemory) *
+                      100
+                    ).toFixed(0)}% 已用`}
                     color="purple"
                   />
-                  <StatCard
-                    label="堆内存"
-                    value={formatBytes(stats.process?.heapUsed)}
-                    sub={`/ ${formatBytes(stats.process?.heapTotal)}`}
-                    color="cyan"
-                  />
                 </div>
 
-                <div className="space-y-2 mt-2">
+                <div className="mt-2">
                   <ProgressBar
-                    label="系统内存使用率"
-                    value={stats.system?.totalMemory - stats.system?.freeMemory}
-                    max={stats.system?.totalMemory}
-                    color="#a855f7"
-                  />
-                  <ProgressBar
-                    label="堆内存使用率"
+                    label="内存使用率"
                     value={stats.process?.heapUsed}
                     max={stats.process?.heapTotal}
                     color="#06b6d4"
                   />
                 </div>
-
-                {/* 数据库 */}
-                <SectionTitle>SQLite 数据库</SectionTitle>
-                {stats.database?.error ? (
-                  <div className="text-xs text-red-400">{stats.database.error}</div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-3 gap-2">
-                      {stats.database?.tableCounts &&
-                        Object.entries(stats.database.tableCounts).map(([table, count]) => {
-                          const tableNameMap = {
-                            projects: '项目',
-                            nodes: '节点',
-                            connections: '连接',
-                            history: '历史',
-                            assets: '资源',
-                            settings: '设置'
-                          }
-                          return (
-                            <StatCard
-                              key={table}
-                              label={tableNameMap[table] || table}
-                              value={count >= 0 ? count : '—'}
-                              color={
-                                table === 'projects'
-                                  ? 'blue'
-                                  : table === 'nodes'
-                                    ? 'green'
-                                    : table === 'connections'
-                                      ? 'purple'
-                                      : table === 'history'
-                                        ? 'amber'
-                                        : table === 'assets'
-                                          ? 'cyan'
-                                          : 'red'
-                              }
-                            />
-                          )
-                        })}
-                    </div>
-                    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 mt-2">
-                      <TableRow
-                        label="数据库文件"
-                        value={formatBytes(stats.database?.dbFileSize)}
-                      />
-                      <TableRow label="WAL 日志" value={formatBytes(stats.database?.walFileSize)} />
-                    </div>
-                  </>
-                )}
 
                 {/* 任务引擎 */}
                 <SectionTitle>任务引擎</SectionTitle>
@@ -273,42 +277,117 @@ export function MonitorPanel({ open, onClose }) {
                   <StatCard label="失败" value={stats.engine?.failed} color="red" />
                 </div>
 
-                {/* IPC 通信 */}
-                <SectionTitle>IPC 通信层</SectionTitle>
-                <div className="grid grid-cols-2 gap-2">
-                  <StatCard
-                    label="注册通道"
-                    value={stats.ipc?.registeredChannels}
-                    sub="安全白名单通道"
-                    color="cyan"
+                {/* 存储空间 */}
+                <SectionTitle>存储空间</SectionTitle>
+                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                  <TableRow
+                    label="数据库"
+                    value={formatBytes(stats.database?.dbFileSize)}
                   />
-                  <StatCard
-                    label="累计调用"
-                    value={stats.ipc?.totalCalls?.toLocaleString()}
-                    sub="自启动以来"
-                    color="purple"
+                  <TableRow
+                    label="图片缓存"
+                    value={`${stats.cache?.images?.count || 0} 个 · ${formatBytes(stats.cache?.images?.size)}`}
+                  />
+                  <TableRow
+                    label="视频缓存"
+                    value={`${stats.cache?.videos?.count || 0} 个 · ${formatBytes(stats.cache?.videos?.size)}`}
+                  />
+                  {stats.database?.tableCounts && (
+                    <TableRow
+                      label="历史记录"
+                      value={`${stats.database.tableCounts.history || 0} 条`}
+                    />
+                  )}
+                </div>
+
+                {/* 清理操作 */}
+                <SectionTitle>空间清理</SectionTitle>
+                <div className="space-y-2">
+                  <CleanupButton
+                    onClick={handleClearCache}
+                    loading={cleaningCache}
+                    label="🗑️ 清理图片/视频缓存"
+                    result={cacheResult}
+                  />
+                  <CleanupButton
+                    onClick={handleCleanupDb}
+                    loading={cleaningDb}
+                    label="🧹 清理数据库孤儿数据"
+                    result={dbResult}
+                  />
+                  <CleanupButton
+                    onClick={handleClearHistory}
+                    loading={cleaningHistory}
+                    label="📋 清除所有生成历史"
+                    result={historyResult}
                   />
                 </div>
 
-                {/* 磁盘缓存 */}
-                <SectionTitle>本地资源缓存</SectionTitle>
-                <div className="grid grid-cols-2 gap-2">
-                  <StatCard
-                    label="图片缓存"
-                    value={`${stats.cache?.images?.count} 个`}
-                    sub={formatBytes(stats.cache?.images?.size)}
-                    color="green"
-                  />
-                  <StatCard
-                    label="视频缓存"
-                    value={`${stats.cache?.videos?.count} 个`}
-                    sub={formatBytes(stats.cache?.videos?.size)}
-                    color="amber"
-                  />
+                {/* 开发者信息（折叠） */}
+                <div className="mt-4">
+                  <button
+                    onClick={() => setShowDev(!showDev)}
+                    className="w-full text-center text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors py-1"
+                  >
+                    {showDev ? '▲ 收起开发者信息' : '▼ 开发者信息'}
+                  </button>
+
+                  {showDev && (
+                    <div className="mt-2 space-y-2 animate-in fade-in duration-200">
+                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <TableRow label="Electron" value={`v${stats.system?.electronVersion}`} />
+                        <TableRow label="Node.js" value={`v${stats.system?.nodeVersion}`} />
+                        <TableRow label="Chromium" value={`v${stats.system?.chromeVersion}`} />
+                        <TableRow label="V8" value={`v${stats.system?.v8Version}`} />
+                        <TableRow
+                          label="CPU"
+                          value={`${stats.system?.cpuModel?.split('@')[0]?.trim()}`}
+                        />
+                        <TableRow label="CPU 核心" value={`${stats.system?.cpuCores} 核`} />
+                        <TableRow label="PID" value={stats.process?.pid} />
+                      </div>
+
+                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <TableRow label="堆内存" value={`${formatBytes(stats.process?.heapUsed)} / ${formatBytes(stats.process?.heapTotal)}`} />
+                        <TableRow label="WAL 日志" value={formatBytes(stats.database?.walFileSize)} />
+                        <TableRow label="IPC 通道" value={stats.ipc?.registeredChannels} />
+                        <TableRow label="IPC 调用" value={stats.ipc?.totalCalls?.toLocaleString()} />
+                      </div>
+
+                      {stats.database?.tableCounts && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {Object.entries(stats.database.tableCounts).map(([table, count]) => {
+                            const nameMap = {
+                              projects: '项目',
+                              nodes: '节点',
+                              connections: '连接',
+                              history: '历史',
+                              assets: '资源',
+                              settings: '设置'
+                            }
+                            return (
+                              <StatCard
+                                key={table}
+                                label={nameMap[table] || table}
+                                value={count >= 0 ? count : '—'}
+                                color={
+                                  table === 'nodes'
+                                    ? 'green'
+                                    : table === 'connections'
+                                      ? 'purple'
+                                      : 'blue'
+                                }
+                              />
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* 底部时间戳 */}
-                <div className="text-center text-[10px] text-[var(--text-muted)] mt-4 pb-4">
+                <div className="text-center text-[10px] text-[var(--text-muted)] mt-3 pb-4">
                   最后更新: {new Date(stats.timestamp).toLocaleTimeString()} · 每 2s 自动刷新
                 </div>
               </>

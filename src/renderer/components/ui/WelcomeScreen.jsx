@@ -30,6 +30,18 @@ export const WelcomeScreen = ({ projects, setProjects, handleDeleteHistoryProjec
     }
   }, [currentProject, isVisible, isFadingOut])
 
+  // 返回首页：当 currentProject 变为 null 时，重新显示欢迎屏
+  useEffect(() => {
+    if (!currentProject && !isVisible) {
+      setIsVisible(true)
+      setIsFadingOut(false)
+      // 恢复视频播放
+      if (videoRef.current) {
+        videoRef.current.play().catch(() => {})
+      }
+    }
+  }, [currentProject])
+
   if (!isVisible) return null
 
   // ========== 创建项目 ==========
@@ -39,37 +51,71 @@ export const WelcomeScreen = ({ projects, setProjects, handleDeleteHistoryProjec
     const newId = `proj-${Date.now()}`
     setIsFadingOut(true)
     setTimeout(() => {
-      const newProj = {
-        id: newId,
-        name,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        data: { nodes: [], connections: [], view: null, projectName: name }
-      }
-      setCurrentProject({ id: newId, name, createdAt: newProj.createdAt })
+      setCurrentProject({ id: newId, name, createdAt: new Date().toISOString() })
       useAppStore.getState().setProjectName(name)
-      setProjects((prev) => [newProj, ...prev])
+      setProjects((prev) => [
+        { id: newId, name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), thumbnail: null },
+        ...prev
+      ])
       setIsVisible(false)
     }, 800)
   }
 
-  // ========== 加载项目（直接进入，无确认弹窗） ==========
-  const handleLoadProject = (project) => {
-    if (!project?.data) return
+  // ========== 加载项目（从 SQLite 优先，回退到旧 data 字段） ==========
+  const handleLoadProject = async (project) => {
+    if (!project?.id) return
     setIsFadingOut(true)
-    setTimeout(() => {
-      const { nodes, connections, view, projectName } = project.data
-      const store = useAppStore.getState()
-      store.setNodes(nodes || [])
-      store.setConnections(connections || [])
-      if (view) store.setView(view)
-      if (projectName) store.setProjectName(projectName)
-      store.setCurrentProject({
-        id: project.id,
-        name: project.name,
-        createdAt: project.createdAt || project.updatedAt || new Date().toISOString()
-      })
-      setIsVisible(false)
+    setTimeout(async () => {
+      try {
+        const store = useAppStore.getState()
+
+        // 优先从 SQLite 加载
+        let savedNodes = []
+        let savedConnections = []
+        if (window.dbAPI?.nodes?.list) {
+          savedNodes = await window.dbAPI.nodes.list(project.id)
+        }
+        if (window.dbAPI?.connections?.list) {
+          savedConnections = await window.dbAPI.connections.list(project.id)
+        }
+
+        // 回退到旧的 data 字段
+        if (savedNodes.length === 0 && project.data?.nodes) {
+          savedNodes = project.data.nodes
+        }
+        if (savedConnections.length === 0 && project.data?.connections) {
+          savedConnections = project.data.connections
+        }
+
+        store.setNodes(savedNodes || [])
+        store.setConnections(savedConnections || [])
+        if (project.data?.view) store.setView(project.data.view)
+        store.setProjectName(project.data?.projectName || project.name)
+        store.setCurrentProject({
+          id: project.id,
+          name: project.name,
+          createdAt: project.createdAt || project.updatedAt || new Date().toISOString()
+        })
+
+        // 加载项目专属历史记录
+        if (window.dbAPI?.settings) {
+          const historyKey = `tapnow_history_v2_${project.id}`
+          const historyJson = await window.dbAPI.settings.get(historyKey)
+          if (historyJson) {
+            try {
+              const parsed = JSON.parse(historyJson)
+              if (Array.isArray(parsed)) store.setHistory(parsed)
+            } catch { /* ignore */ }
+          } else {
+            store.setHistory([])
+          }
+        }
+
+        setIsVisible(false)
+      } catch (e) {
+        console.error('[WelcomeScreen] 加载项目失败:', e)
+        setIsFadingOut(false)
+      }
     }, 800)
   }
 
@@ -191,9 +237,7 @@ export const WelcomeScreen = ({ projects, setProjects, handleDeleteHistoryProjec
         <div className="flex-1 min-h-0 flex flex-col z-20 px-8 pb-4">
           {projects.length === 0 ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-white/20 text-sm tracking-wider">
-                暂无项目，创建你的第一个项目吧
-              </p>
+              <p className="text-white/20 text-sm tracking-wider">暂无项目，创建你的第一个项目吧</p>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto custom-scrollbar pt-2">
@@ -215,9 +259,7 @@ export const WelcomeScreen = ({ projects, setProjects, handleDeleteHistoryProjec
                           ? 'rgba(160,160,180,0.3)'
                           : 'rgba(255,255,255,0.06)',
                       boxShadow:
-                        hoveredProjectId === project.id
-                          ? '0 4px 16px rgba(0,0,0,0.3)'
-                          : 'none'
+                        hoveredProjectId === project.id ? '0 4px 16px rgba(0,0,0,0.3)' : 'none'
                     }}
                   >
                     <div

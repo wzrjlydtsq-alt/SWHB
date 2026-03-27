@@ -32,6 +32,7 @@ export function SettingsFeature({
   projects,
   handleLoadFromHistory,
   handleDeleteHistoryProject,
+  handleSaveAndCreateNew,
   createCharacterOpen,
   setCreateCharacterOpen,
   createCharacterVideoSourceType,
@@ -108,6 +109,7 @@ export function SettingsFeature({
       projects={projects}
       handleLoadFromHistory={handleLoadFromHistory}
       handleDeleteHistoryProject={handleDeleteHistoryProject}
+      handleSaveAndCreateNew={handleSaveAndCreateNew}
       lightboxItem={null}
       createCharacterOpen={createCharacterOpen}
       setCreateCharacterOpen={setCreateCharacterOpen}

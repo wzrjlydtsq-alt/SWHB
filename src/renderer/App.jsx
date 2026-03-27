@@ -1,3 +1,9 @@
+/**
+ * 星河智绘 (Xinghe Zhihui)
+ * Copyright (c) 2025-2026 成都灵境星河动漫科技有限公司
+ * 开发者: 郭瑞凡 (Guo Ruifan)
+ * All rights reserved.
+ */
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 
 import { useAppStore } from './store/useAppStore.js'
@@ -295,10 +301,22 @@ function App() {
   const {
     projects,
     setProjects,
+    loadFromDatabase,
     handleSaveToHistory,
     handleLoadFromHistory,
-    handleDeleteHistoryProject
+    handleDeleteHistoryProject,
+    handleSaveAndCreateNew
   } = projectFileResult
+
+  // 启动时自动从 SQLite 恢复节点（当 currentProject 可用时）
+  const currentProject = useAppStore((s) => s.currentProject)
+  useEffect(() => {
+    if (currentProject?.id) {
+      loadFromDatabase().then(() => {
+        console.log(`[App] 自动恢复项目节点: ${currentProject.id}`)
+      })
+    }
+  }, [currentProject?.id, loadFromDatabase])
 
   // ========== Menu Manager ==========
   const {
@@ -405,9 +423,15 @@ function App() {
   const isPerfMode = nodes.length > 50
 
   // ========== Canvas DragOver handler ==========
+  // 注意：只调用 preventDefault 防止浏览器默认打开文件，不能 stopPropagation
+  // 否则会拦截资产库面板的外部文件拖入事件
   const handleCanvasDragOver = useCallback((e) => {
     e.preventDefault()
-    e.stopPropagation()
+  }, [])
+
+  // 全局 drop 防默认（阻止浏览器直接打开拖入的文件），不拦截冒泡
+  const handleGlobalDrop = useCallback((e) => {
+    e.preventDefault()
   }, [])
 
   return (
@@ -422,7 +446,7 @@ function App() {
       <div
         className={`w-full h-screen font-sans overflow-hidden select-none flex flex-col transition-colors duration-300 bg-transparent text-white ${isPerfMode ? 'perf-mode' : ''}`}
         onDragOver={handleCanvasDragOver}
-        onDrop={handleCanvasDragOver}
+        onDrop={handleGlobalDrop}
         onClick={() => {
           if (historyContextMenu.visible)
             setHistoryContextMenu((prev) => ({ ...prev, visible: false }))
@@ -430,7 +454,6 @@ function App() {
         }}
       >
         {/* Top Bar */}
-
 
         <div
           className="flex-1 relative overflow-hidden flex transition-colors duration-300 bg-transparent"
@@ -617,6 +640,7 @@ function App() {
             projects={projects}
             handleLoadFromHistory={handleLoadFromHistory}
             handleDeleteHistoryProject={handleDeleteHistoryProject}
+            handleSaveAndCreateNew={handleSaveAndCreateNew}
             createCharacterOpen={createCharacterOpen}
             setCreateCharacterOpen={setCreateCharacterOpen}
             createCharacterVideoSourceType={createCharacterVideoSourceType}

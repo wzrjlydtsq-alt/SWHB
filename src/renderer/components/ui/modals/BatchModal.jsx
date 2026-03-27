@@ -9,7 +9,6 @@ import {
   ArrowRightSquare
 } from '../../../utils/icons.jsx'
 import { getXingheMediaSrc } from '../../../utils/fileHelpers.js'
-import { setSettingJSON } from '../../../services/dbService.js'
 
 export function BatchModal({
   batchModalOpen,
@@ -88,15 +87,9 @@ export function BatchModal({
                     }
                   }
 
-                  setHistory((prev) => {
-                    const filtered = prev.filter((item) => !batchSelectedIds.has(item.id))
-                    try {
-                      setSettingJSON('tapnow_history', filtered)
-                    } catch (e) {
-                      console.error('立即保存历史记录失败:', e)
-                    }
-                    return filtered
-                  })
+                  setHistory((prev) =>
+                    prev.filter((item) => !batchSelectedIds.has(item.id))
+                  )
                   setBatchSelectedIds(new Set())
                 }
               }}
@@ -178,8 +171,8 @@ export function BatchModal({
                     }
                   }
 
-                  setHistory((prev) => {
-                    const updated = prev.map((item) => {
+                  setHistory((prev) =>
+                    prev.map((item) => {
                       if (!batchSelectedIds.has(item.id)) return item
                       if (clearRemote && item.url && !item.url.startsWith('file:///')) {
                         return { ...item, originalUrl: item.url, url: null, mjImages: null }
@@ -193,13 +186,7 @@ export function BatchModal({
                       }
                       return item
                     })
-                    try {
-                      setSettingJSON('tapnow_history', updated)
-                    } catch (e) {
-                      console.error('保存历史记录失败:', e)
-                    }
-                    return updated
-                  })
+                  )
                   setBatchSelectedIds(new Set())
                   alert(`已清理 ${itemsToClear.length} 项${cacheType}`)
                 }

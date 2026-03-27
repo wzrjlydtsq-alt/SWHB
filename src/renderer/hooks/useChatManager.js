@@ -202,10 +202,12 @@ export const useChatManager = ({ apiConfigsMap, chatApiKey }) => {
     if ((!chatInput.trim() && chatFiles.length === 0) || isChatSending) return
 
     const config = apiConfigsMap.get(chatModel)
-    const baseUrl = (chatApiUrl || DEFAULT_BASE_URL).replace(/\/+$/, '')
+    // 优先使用模型配置中的 key 和 baseUrl，回退到全局配置
+    const apiKey = config?.key || chatApiKey
+    const baseUrl = (config?.url || chatApiUrl || DEFAULT_BASE_URL).replace(/\/+$/, '')
 
-    if (!chatApiKey) {
-      alert('请先在系统设置中配置您的 API Key')
+    if (!apiKey) {
+      alert('请先在模型接口配置或系统设置中配置 API Key')
       return
     }
 
@@ -302,7 +304,7 @@ export const useChatManager = ({ apiConfigsMap, chatApiKey }) => {
             stream: false
           })
         },
-        { baseUrl, apiKey: chatApiKey }
+        { baseUrl, apiKey }
       )
 
       let aiContent =

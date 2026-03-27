@@ -70,5 +70,6 @@ export {
   Music,
   Film,
   FolderPlus,
-  Image
+  Image,
+  Home
 } from 'lucide-react'

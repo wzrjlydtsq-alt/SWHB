@@ -1,31 +1,32 @@
 import { memo, useMemo, useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../../store/useAppStore.js'
 import { useShallow } from 'zustand/react/shallow'
-import { Group, Ungroup, EyeOff, Eye } from 'lucide-react'
+import { Group, Ungroup, EyeOff, Eye, Play } from 'lucide-react'
 import { useCanvasContext } from '../../contexts/CanvasContext.jsx'
+import { getXingheMediaSrc } from '../../utils/fileHelpers.js'
 
 export const SelectionToolbar = memo(function SelectionToolbar() {
-  const {
-    selectedNodeIds,
-    nodes,
-    nodeGroups,
-    createGroup,
-    removeGroup,
-    renameGroup,
-    view
-  } = useAppStore(
-    useShallow((state) => ({
-      selectedNodeIds: state.selectedNodeIds,
-      nodes: state.nodes,
-      nodeGroups: state.nodeGroups,
-      createGroup: state.createGroup,
-      removeGroup: state.removeGroup,
-      renameGroup: state.renameGroup,
-      view: state.view
-    }))
-  )
+  const { selectedNodeIds, nodes, nodeGroups, createGroup, removeGroup, renameGroup, view } =
+    useAppStore(
+      useShallow((state) => ({
+        selectedNodeIds: state.selectedNodeIds,
+        nodes: state.nodes,
+        nodeGroups: state.nodeGroups,
+        createGroup: state.createGroup,
+        removeGroup: state.removeGroup,
+        renameGroup: state.renameGroup,
+        view: state.view
+      }))
+    )
 
   const { updateNodeSettings } = useCanvasContext()
+  const {
+    startGeneration,
+    getConnectedTextNodes,
+    getConnectedImageForInput,
+    getConnectedAudioNodes,
+    getConnectedInputImages
+  } = useCanvasContext()
   const setConnections = useAppStore((s) => s.setConnections)
 
   const [editingGroupId, setEditingGroupId] = useState(null)
@@ -48,7 +49,9 @@ export const SelectionToolbar = memo(function SelectionToolbar() {
   const selectedNodes = nodes.filter((n) => selectedNodeIds.has(n.id))
   if (selectedNodes.length < 2) return null
 
-  let minX = Infinity, maxX = -Infinity, minY = Infinity
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity
   for (const n of selectedNodes) {
     const nx = n.x ?? n.position?.x ?? 0
     const ny = n.y ?? n.position?.y ?? 0
@@ -113,6 +116,90 @@ export const SelectionToolbar = memo(function SelectionToolbar() {
       renameGroup(editingGroupId, editName.trim())
     }
     setEditingGroupId(null)
+  }
+
+  // ========== 批量运行 ==========
+  const genNodes = selectedNodes.filter((n) => n.type === 'gen-image' || n.type === 'gen-video')
+  const hasGenNodes = genNodes.length > 0
+
+  const handleRunAll = async (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+
+    for (const node of genNodes) {
+      try {
+        const basePrompt =
+          node.type === 'gen-image' ? node.settings?.prompt || '' : node.settings?.videoPrompt || ''
+
+        const appliedTpls =
+          node.type === 'gen-image'
+            ? node.settings?.appliedTemplates || []
+            : node.settings?.appliedVideoTemplates || []
+        const templateContents = appliedTpls.map((t) => t.content).filter(Boolean)
+
+        const connectedTexts = getConnectedTextNodes ? getConnectedTextNodes(node.id) : []
+
+        const allParts = [...templateContents, ...connectedTexts]
+        if (basePrompt) allParts.push(basePrompt)
+        let rawPrompt = allParts.join(' ')
+
+        const finalPrompt = rawPrompt
+          .replace(/@图片(\d+)\s?/g, '【图$1】')
+          .replace(/@音频(\d+)\s?/g, '【音$1】')
+
+        // 收集连接的图片
+        const connImgs = getConnectedInputImages ? getConnectedInputImages(node.id) : []
+        const manualImgs = (node.settings?.manualImages || []).map((p) => getXingheMediaSrc(p))
+        let finalConnectedImages = [...connImgs, ...manualImgs]
+        let payloadSettings = { ...node.settings, batchSize: 1 }
+
+        // Veo 首尾帧模式
+        if (node.type === 'gen-video' && node.settings?.veoFramesMode) {
+          const sf =
+            node.settings?.manualStartFrame ||
+            (getConnectedImageForInput ? getConnectedImageForInput(node.id, 'veo_start') : null)
+          const ef =
+            node.settings?.manualEndFrame ||
+            (getConnectedImageForInput ? getConnectedImageForInput(node.id, 'veo_end') : null)
+          finalConnectedImages = []
+          const roles = []
+          if (sf) {
+            finalConnectedImages.push(sf)
+            roles.push('first_frame')
+          }
+          if (ef) {
+            finalConnectedImages.push(ef)
+            roles.push(sf ? 'last_frame' : 'first_frame')
+          }
+          payloadSettings.imageRoles = roles.length > 0 ? roles : undefined
+          payloadSettings.generationMode = 'image-first-last-frame'
+        }
+
+        if (node.type === 'gen-video') {
+          payloadSettings.sourceVideos = node.settings?.sourceVideosText
+            ? node.settings.sourceVideosText.split('\n').filter((u) => u.trim())
+            : undefined
+          const genAudios = getConnectedAudioNodes ? getConnectedAudioNodes(node.id) : []
+          const manualAuds = node.settings?.manualAudios || []
+          const allAudios = [...genAudios, ...manualAuds]
+          payloadSettings.sourceAudios = allAudios.length > 0 ? allAudios : undefined
+        }
+
+        const batchSize = node.settings?.batchSize || 1
+        for (let i = 0; i < batchSize; i++) {
+          await startGeneration(
+            finalPrompt,
+            node.type === 'gen-image' ? 'image' : 'video',
+            finalConnectedImages,
+            node.id,
+            payloadSettings
+          )
+          if (i < batchSize - 1) await new Promise((r) => setTimeout(r, 1000))
+        }
+      } catch (err) {
+        console.error(`[批量运行] 节点 ${node.id} 生成失败:`, err)
+      }
+    }
   }
 
   return (
@@ -188,6 +275,21 @@ export const SelectionToolbar = memo(function SelectionToolbar() {
             <Group size={13} />
             <span>编组</span>
           </button>
+        )}
+
+        {/* 分隔线 + 批量运行按钮 */}
+        {hasGenNodes && (
+          <>
+            <div className="w-px h-4 bg-[var(--border-color)]" />
+            <button
+              onClick={handleRunAll}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-green-400 hover:bg-green-500/15 hover:text-green-300 transition-all"
+              title={`运行全部 ${genNodes.length} 个生成节点`}
+            >
+              <Play size={13} />
+              <span>全部运行 ({genNodes.length})</span>
+            </button>
+          </>
         )}
       </div>
     </div>

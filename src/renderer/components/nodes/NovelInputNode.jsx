@@ -1,4 +1,4 @@
-import { FileText, Trash2 } from '../../utils/icons.jsx'
+0;import { FileText, Trash2 } from '../../utils/icons.jsx'
 
 export const NovelInputNode = ({
   node,

@@ -19,8 +19,6 @@ import { SelectionToolbar } from './SelectionToolbar'
 
 const PAN_ON_DRAG_CONFIG = [1, 2]
 
-
-
 // 使用 store 的 nodesMap 进行 O(1) 查找，避免每个节点订阅整个 nodes 数组
 const ReactFlowCustomNode = React.memo(function ReactFlowCustomNode({ id }) {
   const node = useAppStore(useCallback((state) => state.nodesMap.get(id), [id]))
@@ -89,11 +87,21 @@ function ReactFlowCanvasInner() {
   }, [])
 
   const handleDragOver = useCallback((e) => {
+    // 如果落点在资产库面板区域，不拦截，让资产库面板自行处理
+    const assetLibraryOpen = useAppStore.getState().assetLibraryOpen
+    if (assetLibraryOpen && e.clientY <= window.innerHeight * 0.18) {
+      return
+    }
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }, [])
 
   const handleDrop = useCallback(async (e) => {
+    // 如果落点在资产库面板区域（顶部 18vh），不处理，让资产库接收
+    const assetLibraryOpen = useAppStore.getState().assetLibraryOpen
+    if (assetLibraryOpen && e.clientY <= window.innerHeight * 0.18) {
+      return
+    }
     e.preventDefault()
     if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return
 
@@ -179,20 +187,41 @@ function ReactFlowCanvasInner() {
         continue
       }
 
-      await new Promise((resolve) => {
-        const reader = new FileReader()
-        reader.onload = async (event) => {
-          const base64Content = event.target.result
+      try {
+        let finalUrl = null
+        let finalPath = null
+        let ext = '.jpg'
+        let cacheType = 'image'
 
-          let ext = '.jpg'
-          let cacheType = 'image'
+        if (isAudio) {
+          ext = file.name ? '.' + file.name.split('.').pop() : '.mp3'
+          cacheType = 'audio'
+        } else {
+          ext = file.name ? '.' + file.name.split('.').pop() : '.jpg'
+        }
 
-          if (isAudio) {
-            ext = file.name ? '.' + file.name.split('.').pop() : '.mp3'
-            cacheType = 'audio'
-          } else {
-            ext = file.name ? '.' + file.name.split('.').pop() : '.jpg'
+        // 优先通过主进程文件拷贝
+        if (file.path) {
+          const response = await window.api.invoke('cache:copy-file', {
+            id: `drop_${Date.now()}_${i}`,
+            sourcePath: file.path,
+            category: 'user_upload',
+            type: cacheType
+          })
+          if (response?.success && response.url) {
+            finalUrl = response.url
+            finalPath = response.path
           }
+        }
+
+        // 降级使用 FileReader 读取
+        if (!finalUrl) {
+          const base64Content = await new Promise((res, rej) => {
+            const reader = new FileReader()
+            reader.onload = (e) => res(e.target.result)
+            reader.onerror = (e) => rej(e)
+            reader.readAsDataURL(file)
+          })
 
           const response = await window.api.invoke('cache:save-cache', {
             id: `drop_${Date.now()}_${i}`,
@@ -203,56 +232,59 @@ function ReactFlowCanvasInner() {
           })
 
           if (response?.success && response.url) {
-            const finalUrl = response.url
-            let finalW = type === 'audio-input' ? 320 : 300
-            let finalH = type === 'audio-input' ? 150 : 300
-
-            if (type === 'input-image') {
-              try {
-                const dims = await getImageDimensions(finalUrl)
-                if (dims && dims.w > 0) {
-                  const maxDim = 400
-                  let w = dims.w
-                  let h = dims.h
-
-                  if (w > maxDim || h > maxDim) {
-                    if (w > h) {
-                      h = Math.round(h * (maxDim / w))
-                      w = maxDim
-                    } else {
-                      w = Math.round(w * (maxDim / h))
-                      h = maxDim
-                    }
-                  }
-                  finalW = w
-                  finalH = h
-                }
-              } catch (err) {
-                console.error('Failed to get dimensions:', err)
-              }
-            }
-
-            const newNode = {
-              id: `node_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-              type,
-              position: { x: offsetX, y: offsetY },
-              data: {},
-              content: finalUrl,
-              fileName: isAudio ? file.name : undefined,
-              filePath: isAudio ? response.path || finalUrl : undefined,
-              width: finalW,
-              height: finalH,
-              dimensions: { w: finalW, h: finalH }
-            }
-            newNodes.push(newNode)
-          } else {
-            console.error(`处理文件 ${file.name} 失败`)
+            finalUrl = response.url
+            finalPath = response.path
           }
-          resolve()
         }
-        reader.onerror = () => resolve()
-        reader.readAsDataURL(file)
-      })
+
+        if (finalUrl) {
+          let finalW = type === 'audio-input' ? 320 : 300
+          let finalH = type === 'audio-input' ? 150 : 300
+
+          if (type === 'input-image') {
+            try {
+              const dims = await getImageDimensions(finalUrl)
+              if (dims && dims.w > 0) {
+                const maxDim = 400
+                let w = dims.w
+                let h = dims.h
+
+                if (w > maxDim || h > maxDim) {
+                  if (w > h) {
+                    h = Math.round(h * (maxDim / w))
+                    w = maxDim
+                  } else {
+                    w = Math.round(w * (maxDim / h))
+                    h = maxDim
+                  }
+                }
+                finalW = w
+                finalH = h
+              }
+            } catch (err) {
+              console.error('Failed to get dimensions:', err)
+            }
+          }
+
+          const newNode = {
+            id: `node_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            type,
+            position: { x: offsetX, y: offsetY },
+            data: {},
+            content: finalUrl,
+            fileName: isAudio ? file.name : undefined,
+            filePath: isAudio ? finalPath || finalUrl : undefined,
+            width: finalW,
+            height: finalH,
+            dimensions: { w: finalW, h: finalH }
+          }
+          newNodes.push(newNode)
+        } else {
+          console.error(`处理文件 ${file.name} 失败`)
+        }
+      } catch (err) {
+        console.error(`处理拖拽文件异常:`, err)
+      }
     }
 
     if (newNodes.length > 0) {

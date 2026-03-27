@@ -41,7 +41,7 @@ const serializeNodeForSave = (node) => ({
  */
 export const useNodesState = (apiConfigs = []) => {
   // 仅订阅 setter 和 connections（稳定引用或低频变化）
-  // nodes 和 nodesMap 不在此订阅——由 TapnowApp 的自定义相等性控制重渲染
+  // nodes 和 nodesMap 不在此订阅——由 ljxhapp 的自定义相等性控制重渲染
   const { setNodes, connections, setConnections } = useAppStore(
     useShallow((state) => ({
       setNodes: state.setNodes,
@@ -198,19 +198,41 @@ export const useNodesState = (apiConfigs = []) => {
     }
   }, [])
 
+  // 微任务批量合并：同一帧内多次 updateNodeSettings 只触发一次 setNodes
+  const pendingUpdatesRef = useRef(new Map()) // Map<nodeId, mergedSettings>
+  const flushScheduledRef = useRef(false)
+
   const updateNodeSettings = useCallback((id, newSettings) => {
-    setNodes((prev) => {
-      const next = prev.map((n) =>
-        n.id === id ? { ...n, settings: { ...n.settings, ...newSettings } } : n
-      )
-      const updatedNode = next.find((n) => n.id === id)
-      if (updatedNode && window.dbAPI?.nodes?.save) {
-        window.dbAPI.nodes
-          .save(serializeNodeForSave(updatedNode))
-          .catch((e) => console.error(e))
-      }
-      return next
-    })
+    // 合并 pending 更新
+    const existing = pendingUpdatesRef.current.get(id) || {}
+    pendingUpdatesRef.current.set(id, { ...existing, ...newSettings })
+
+    // 调度微任务 flush（同一帧内只执行一次）
+    if (!flushScheduledRef.current) {
+      flushScheduledRef.current = true
+      queueMicrotask(() => {
+        const updates = new Map(pendingUpdatesRef.current)
+        pendingUpdatesRef.current.clear()
+        flushScheduledRef.current = false
+
+        if (updates.size === 0) return
+
+        setNodes((prev) => {
+          const next = prev.map((n) => {
+            const merged = updates.get(n.id)
+            return merged ? { ...n, settings: { ...n.settings, ...merged } } : n
+          })
+          // 批量保存所有更新的节点
+          for (const nodeId of updates.keys()) {
+            const updatedNode = next.find((n) => n.id === nodeId)
+            if (updatedNode) {
+              customDebouncedSaveNode(serializeNodeForSave(updatedNode))
+            }
+          }
+          return next
+        })
+      })
+    }
   }, [])
 
   const handleVideoFileUpload = useCallback(
@@ -292,7 +314,8 @@ export const useNodesState = (apiConfigs = []) => {
         'generate-character-image': { w: 400, h: 450 },
         'generate-scene-image': { w: 400, h: 450 },
         'agent-node': { w: 400, h: 500 },
-        'alchemy-node': { w: 420, h: 320 }
+        'alchemy-node': { w: 420, h: 320 },
+        'director-node': { w: 580, h: 520 }
       }
 
       const defaultSize = defaultSizes[type] || { w: 260, h: 260 }

@@ -1,19 +1,22 @@
-import { memo, useState, useEffect, useRef, useCallback } from 'react'
+import { memo, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { getXingheMediaSrc } from '../../utils/fileHelpers.js'
 import { ThumbnailImage } from '../ui/ThumbnailImage.jsx'
+import { useAppStore } from '../../store/useAppStore.js'
 
-const STORAGE_KEY = 'tapnow_asset_library'
+function getStorageKey() {
+  const projectId = useAppStore.getState().currentProject?.id
+  return projectId ? `tapnow_asset_library_${projectId}` : 'tapnow_asset_library'
+}
 
 function addToAssetLibrary(category, url) {
   try {
-    const rawData = localStorage.getItem(STORAGE_KEY)
+    const key = getStorageKey()
+    const rawData = localStorage.getItem(key)
     const data = rawData ? JSON.parse(rawData) : {}
-    // Ensure category structure exists
     if (!data[category] || typeof data[category] !== 'object') {
       data[category] = { folders: [], items: [] }
     }
-    // Handle legacy array format
     if (Array.isArray(data[category])) {
       data[category] = { folders: [], items: data[category] }
     }
@@ -36,8 +39,7 @@ function addToAssetLibrary(category, url) {
       path: url,
       addedAt: Date.now()
     })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-    // 通知 AssetLibrary 实时重新加载
+    localStorage.setItem(key, JSON.stringify(data))
     window.dispatchEvent(new CustomEvent('asset-library-updated'))
     return true
   } catch (e) {
@@ -47,11 +49,13 @@ function addToAssetLibrary(category, url) {
 }
 
 /**
- * OutputResultsPanel — renders generated results as cards
- * on the RIGHT side of the gen node using a React Portal.
+ * OutputResultsPanel — 生成结果卡片
+ *
+ * Portal 到画布 transform 容器内，使用节点世界坐标定位。
+ * 面板在 CSS transform 内，自动跟随画布平移/缩放，零事件监听。
  */
 export const OutputResultsPanel = memo(function OutputResultsPanel({
-  results,
+  results: propResults,
   nodeId,
   updateNodeSettings,
   setLightboxItem,
@@ -59,62 +63,19 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
 }) {
   const [contextMenu, setContextMenu] = useState(null)
   const [toast, setToast] = useState(null)
-  const [pos, setPos] = useState(null)
-  const [editPopup, setEditPopup] = useState(null) // { result, prompt }
+  const [editPopup, setEditPopup] = useState(null)
   const [editPrompt, setEditPrompt] = useState('')
-  const [dims, setDims] = useState({}) // { [idx]: 'WxH' }
-  const lastPosRef = useRef({ top: 0, left: 0 })
+  const [dims, setDims] = useState({})
 
-  // 计算并更新面板位置（仅在位置变化 >0.5px 时触发 setState）
-  const syncPosition = useCallback(() => {
-    const nodeEl = document.querySelector(`.react-flow__node[data-id="${nodeId}"]`)
-    if (!nodeEl) return
-    const rect = nodeEl.getBoundingClientRect()
-    const newTop = rect.top
-    const newLeft = rect.right + 12
-    if (
-      Math.abs(lastPosRef.current.top - newTop) > 0.5 ||
-      Math.abs(lastPosRef.current.left - newLeft) > 0.5
-    ) {
-      lastPosRef.current = { top: newTop, left: newLeft }
-      setPos({ top: newTop, left: newLeft })
-    }
-  }, [nodeId])
+  // 直接从 store 订阅，不依赖 GenNode props 传递（避免 memo 阻断更新）
+  const nodeX = useAppStore((state) => state.nodesMap.get(nodeId)?.x ?? 0)
+  const nodeY = useAppStore((state) => state.nodesMap.get(nodeId)?.y ?? 0)
+  const nodeWidth = useAppStore((state) => state.nodesMap.get(nodeId)?.width ?? 300)
+  const nodeExists = useAppStore((state) => state.nodesMap.has(nodeId))
+  const storeResults = useAppStore((state) => state.nodesMap.get(nodeId)?.settings?.outputResults)
 
-  // 事件驱动位置更新：只在画布交互时更新，不再每帧轮询
-  useEffect(() => {
-    if (!results || results.length === 0) return
-
-    // 初始定位
-    syncPosition()
-
-    const canvas = document.querySelector('.react-flow')
-    if (!canvas) return
-
-    // 用 RAF 节流事件处理，避免高频事件导致性能问题
-    let rafPending = false
-    const throttledSync = () => {
-      if (rafPending) return
-      rafPending = true
-      requestAnimationFrame(() => {
-        syncPosition()
-        rafPending = false
-      })
-    }
-
-    // 监听画布交互事件
-    canvas.addEventListener('wheel', throttledSync, { passive: true })
-    canvas.addEventListener('mousemove', throttledSync, { passive: true })
-    canvas.addEventListener('scroll', throttledSync, { passive: true })
-    window.addEventListener('resize', throttledSync)
-
-    return () => {
-      canvas.removeEventListener('wheel', throttledSync)
-      canvas.removeEventListener('mousemove', throttledSync)
-      canvas.removeEventListener('scroll', throttledSync)
-      window.removeEventListener('resize', throttledSync)
-    }
-  }, [results, syncPosition])
+  // 优先使用 store 订阅的数据，props 作为后备
+  const results = storeResults || propResults
 
   useEffect(() => {
     if (!toast) return
@@ -122,7 +83,7 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
     return () => clearTimeout(t)
   }, [toast])
 
-  if (!results || results.length === 0 || !pos) return null
+  if (!results || results.length === 0 || !nodeExists) return null
 
   const cardSize = 120
 
@@ -179,18 +140,21 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
     if (vw && vh) setDims((prev) => ({ ...prev, [idx]: `${vw}×${vh}` }))
   }
 
+  // 世界坐标定位：节点右侧 + 12px 间距
+  const panelX = nodeX + nodeWidth + 12
+  const panelY = nodeY
+
   const panel = (
     <div
       className="pointer-events-auto"
       style={{
-        position: 'fixed',
-        top: pos.top,
-        left: pos.left,
+        position: 'absolute',
+        left: panelX,
+        top: panelY,
         zIndex: 50
       }}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => {
-        // 只在右键菜单外部区域点击时关闭菜单
         if (contextMenu && !e.target.closest('[data-context-menu]')) {
           closeContextMenu()
         }
@@ -234,14 +198,12 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
                 />
               )}
 
-              {/* Dimensions badge */}
               {dims[idx] && (
                 <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-[8px] text-white/90 font-mono pointer-events-none">
                   {dims[idx]}
                 </div>
               )}
 
-              {/* Video badge */}
               {isVideo && (
                 <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[8px] text-white font-medium">
                   ▶
@@ -251,7 +213,12 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
           )
         })}
       </div>
+    </div>
+  )
 
+  // 右键菜单、编辑弹窗、Toast 用 fixed 定位，必须 Portal 到 body（避免 transform 祖先影响）
+  const overlays = (
+    <>
       {/* Right-click context menu */}
       {contextMenu && (
         <div
@@ -266,6 +233,24 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
           >
             查看大图
           </button>
+          {contextMenu.result.type !== 'video' && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 rounded hover:bg-zinc-800"
+              onClick={async () => {
+                try {
+                  const res = await window.api.invoke('clipboard:copy-image', {
+                    filePath: contextMenu.result.url
+                  })
+                  setToast(res?.success ? '已复制到剪贴板' : `复制失败: ${res?.error || '未知错误'}`)
+                } catch (e) {
+                  setToast('复制失败')
+                }
+                closeContextMenu()
+              }}
+            >
+              复制图片
+            </button>
+          )}
           <button
             className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 rounded hover:bg-zinc-800"
             onClick={() => handleEdit(contextMenu.result)}
@@ -290,6 +275,23 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
             onClick={() => handleAddToLibrary(contextMenu.result, 'materials', '素材库')}
           >
             添加到素材库
+          </button>
+          <div className="my-1 border-t border-zinc-700/50" />
+          <button
+            className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 rounded hover:bg-zinc-800"
+            onClick={async () => {
+              const rawUrl = contextMenu.result.url
+              const resolvedUrl = getXingheMediaSrc(rawUrl)
+              const name = rawUrl.split(/[/\\]/).pop()?.split('?')[0] || `output-${Date.now()}.png`
+              try {
+                await window.api.localCacheAPI.saveFileAs(resolvedUrl, name)
+              } catch (e) {
+                console.error('另存为失败:', e)
+              }
+              closeContextMenu()
+            }}
+          >
+            另存为...
           </button>
           <div className="my-1 border-t border-zinc-700/50" />
           <button
@@ -322,9 +324,7 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
                 alt="source"
                 className="w-16 h-16 rounded-lg object-cover border border-zinc-700"
               />
-              <div className="text-xs text-zinc-400">
-                基于此图进行修改
-              </div>
+              <div className="text-xs text-zinc-400">基于此图进行修改</div>
             </div>
             <textarea
               autoFocus
@@ -367,11 +367,17 @@ export const OutputResultsPanel = memo(function OutputResultsPanel({
           {toast}
         </div>
       )}
-    </div>
+    </>
   )
 
-  // Portal 到画布容器内，而非 document.body，避免遮挡其他 UI 模块
-  const canvasContainer = document.querySelector('.react-flow')
-  if (!canvasContainer) return null
-  return createPortal(panel, canvasContainer)
+  // 卡片面板 Portal 到 viewport（跟随画布缩放/平移）
+  const viewport = document.querySelector('.react-flow__viewport')
+  if (!viewport) return null
+
+  return (
+    <>
+      {createPortal(panel, viewport)}
+      {createPortal(overlays, document.body)}
+    </>
+  )
 })

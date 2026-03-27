@@ -19,70 +19,18 @@ export const createProjectSlice = (set, get) => ({
     }
   },
 
-  // === 分类默认 API Key/URL（持久化到 SQLite settings，不再走 localStorage） ===
-  chatApiKey: '',
-  chatApiUrl: '',
-  setChatApiKey: (chatApiKey) => {
-    set({ chatApiKey })
+  // === 统一全局 API Key/URL（持久化到 SQLite settings） ===
+  globalApiKey: '',
+  globalApiUrl: '',
+  setGlobalApiKey: (globalApiKey) => {
+    set({ globalApiKey })
     if (window.dbAPI?.settings)
-      window.dbAPI.settings.set('tapnow_chatApiKey', chatApiKey).catch(() => {})
+      window.dbAPI.settings.set('tapnow_globalApiKey', globalApiKey).catch(() => {})
   },
-  setChatApiUrl: (chatApiUrl) => {
-    set({ chatApiUrl })
+  setGlobalApiUrl: (globalApiUrl) => {
+    set({ globalApiUrl })
     if (window.dbAPI?.settings)
-      window.dbAPI.settings.set('tapnow_chatApiUrl', chatApiUrl).catch(() => {})
-  },
-
-  imageApiKey: '',
-  imageApiUrl: '',
-  setImageApiKey: (imageApiKey) => {
-    set({ imageApiKey })
-    if (window.dbAPI?.settings)
-      window.dbAPI.settings.set('tapnow_imageApiKey', imageApiKey).catch(() => {})
-  },
-  setImageApiUrl: (imageApiUrl) => {
-    set({ imageApiUrl })
-    if (window.dbAPI?.settings)
-      window.dbAPI.settings.set('tapnow_imageApiUrl', imageApiUrl).catch(() => {})
-  },
-
-  videoApiKey: '',
-  videoApiUrl: '',
-  setVideoApiKey: (videoApiKey) => {
-    set({ videoApiKey })
-    if (window.dbAPI?.settings)
-      window.dbAPI.settings.set('tapnow_videoApiKey', videoApiKey).catch(() => {})
-  },
-  setVideoApiUrl: (videoApiUrl) => {
-    set({ videoApiUrl })
-    if (window.dbAPI?.settings)
-      window.dbAPI.settings.set('tapnow_videoApiUrl', videoApiUrl).catch(() => {})
-  },
-
-  // 废弃 getter（全局 API Key/URL 已被分类 API Key/URL 替代）
-  setGlobalApiKey: (key) => {
-    set({ chatApiKey: key, imageApiKey: key, videoApiKey: key })
-    if (window.dbAPI?.settings) {
-      window.dbAPI.settings
-        .setBatch([
-          { key: 'tapnow_chatApiKey', value: key },
-          { key: 'tapnow_imageApiKey', value: key },
-          { key: 'tapnow_videoApiKey', value: key }
-        ])
-        .catch(() => {})
-    }
-  },
-  setGlobalApiUrl: (url) => {
-    set({ chatApiUrl: url, imageApiUrl: url, videoApiUrl: url })
-    if (window.dbAPI?.settings) {
-      window.dbAPI.settings
-        .setBatch([
-          { key: 'tapnow_chatApiUrl', value: url },
-          { key: 'tapnow_imageApiUrl', value: url },
-          { key: 'tapnow_videoApiUrl', value: url }
-        ])
-        .catch(() => {})
-    }
+      window.dbAPI.settings.set('tapnow_globalApiUrl', globalApiUrl).catch(() => {})
   },
 
   jimengSessionId:

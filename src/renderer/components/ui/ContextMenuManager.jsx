@@ -1,11 +1,14 @@
 import { GlobalContextMenu } from './GlobalContextMenu.jsx'
+import { getXingheMediaSrc } from '../../utils/fileHelpers.js'
 import {
   MessageSquare,
   CopyPlus,
   Maximize2,
   ArrowRightSquare,
   LayoutGrid,
-  Scissors
+  Scissors,
+  Download,
+  ClipboardCopy
 } from '../../utils/icons.jsx'
 
 export function ContextMenuManager({
@@ -154,6 +157,61 @@ export function ContextMenuManager({
             }}
           >
             <Scissors size={14} className="text-blue-500" /> 九宫格裁切
+          </button>
+          <div className={`my-0.5 border-t ${'border-zinc-800'}`} />
+          {historyContextMenu.item?.type !== 'video' && (
+            <button
+              className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${'text-zinc-300 hover:bg-zinc-800'}`}
+              onClick={async () => {
+                const item = historyContextMenu.item
+                if (!item?.url) return
+                try {
+                  const res = await window.api.invoke('clipboard:copy-image', {
+                    filePath: item.url
+                  })
+                  if (!res?.success) console.warn('复制失败:', res?.error)
+                } catch (e) {
+                  console.error('复制图片失败:', e)
+                }
+                setHistoryContextMenu({
+                  visible: false,
+                  x: 0,
+                  y: 0,
+                  worldX: 0,
+                  worldY: 0,
+                  item: null
+                })
+              }}
+            >
+              <ClipboardCopy size={14} className="text-green-500" /> 复制图片
+            </button>
+          )}
+          <button
+            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${'text-zinc-300 hover:bg-zinc-800'}`}
+            onClick={async () => {
+              const item = historyContextMenu.item
+              if (!item?.url) return
+              const rawUrl = item.url
+              const resolvedUrl = getXingheMediaSrc(rawUrl)
+              const name =
+                rawUrl.split(/[/\\]/).pop()?.split('?')[0] ||
+                `output-${Date.now()}.${item.type === 'video' ? 'mp4' : 'png'}`
+              try {
+                await window.api.localCacheAPI.saveFileAs(resolvedUrl, name)
+              } catch (e) {
+                console.error('另存为失败:', e)
+              }
+              setHistoryContextMenu({
+                visible: false,
+                x: 0,
+                y: 0,
+                worldX: 0,
+                worldY: 0,
+                item: null
+              })
+            }}
+          >
+            <Download size={14} className="text-cyan-500" /> 另存为...
           </button>
         </div>
       )}

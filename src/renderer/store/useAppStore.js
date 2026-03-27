@@ -48,7 +48,6 @@ const createFullyThrottledStorage = (throttleMs = 2000) => {
 let _cachedPartial = null
 let _lastCharacterLibrary = null
 let _lastApiConfigs = null
-let _lastView = null
 let _lastProjectName = null
 let _lastPromptLibrary = null
 
@@ -58,7 +57,6 @@ function memoizedPartialize(state) {
     _cachedPartial !== null &&
     state.characterLibrary === _lastCharacterLibrary &&
     state.apiConfigs === _lastApiConfigs &&
-    state.view === _lastView &&
     state.projectName === _lastProjectName &&
     state.promptLibrary === _lastPromptLibrary
   ) {
@@ -95,14 +93,12 @@ function memoizedPartialize(state) {
     isPerformanceMode: state.isPerformanceMode,
     jimengUseLocalFile: state.jimengUseLocalFile,
     historyPerformanceMode: state.historyPerformanceMode,
-    savedFolderHistory: state.savedFolderHistory,
-    view: state.view
+    savedFolderHistory: state.savedFolderHistory
   }
 
   // 更新缓存引用
   _lastCharacterLibrary = state.characterLibrary
   _lastApiConfigs = state.apiConfigs
-  _lastView = state.view
   _lastProjectName = state.projectName
   _lastPromptLibrary = state.promptLibrary
 
@@ -124,17 +120,25 @@ export const useAppStore = create(
       storage: createFullyThrottledStorage(2000),
       partialize: memoizedPartialize,
       migrate: (persistedState) => {
-        // 旧数据迁移：globalApiKey → 三组新 key
-        if (persistedState.globalApiKey && !persistedState.chatApiKey) {
-          persistedState.chatApiKey = persistedState.globalApiKey
-          persistedState.imageApiKey = persistedState.globalApiKey
-          persistedState.videoApiKey = persistedState.globalApiKey
+        // 旧数据迁移：分类 API Key/URL → 统一的 globalApiKey/globalApiUrl
+        if (!persistedState.globalApiKey) {
+          const legacyKey =
+            persistedState.chatApiKey || persistedState.imageApiKey || persistedState.videoApiKey
+          if (legacyKey) persistedState.globalApiKey = legacyKey
         }
-        if (persistedState.globalApiUrl && !persistedState.chatApiUrl) {
-          persistedState.chatApiUrl = persistedState.globalApiUrl
-          persistedState.imageApiUrl = persistedState.globalApiUrl
-          persistedState.videoApiUrl = persistedState.globalApiUrl
+        if (!persistedState.globalApiUrl) {
+          const legacyUrl =
+            persistedState.chatApiUrl || persistedState.imageApiUrl || persistedState.videoApiUrl
+          if (legacyUrl) persistedState.globalApiUrl = legacyUrl
         }
+        // 清除已废弃的分类字段
+        delete persistedState.chatApiKey
+        delete persistedState.chatApiUrl
+        delete persistedState.imageApiKey
+        delete persistedState.imageApiUrl
+        delete persistedState.videoApiKey
+        delete persistedState.videoApiUrl
+
         // apiConfigs 修复
         if (persistedState.apiConfigs && !Array.isArray(persistedState.apiConfigs)) {
           console.warn('[迁移] 检测到损坏的 apiConfigs 数据，将重置为默认配置')

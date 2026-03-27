@@ -424,15 +424,19 @@ export function clearAllHistory() {
 
 function serializeNode(node, projectId) {
   const pos = node.position || { x: node.x || 0, y: node.y || 0 }
+  // better-sqlite3 不接受 undefined/object，所有字段必须是 null/number/string/bigint/buffer
+  const safeStr = (v) => (v === undefined || v === null ? null : typeof v === 'object' ? JSON.stringify(v) : v)
+  // projectId 可能是对象 { id, name, ... }，需要提取 .id
+  const pid = projectId && typeof projectId === 'object' ? projectId.id : (projectId ?? null)
   return {
     id: node.id,
-    project_id: projectId,
+    project_id: pid ?? null,
     type: node.type || 'unknown',
-    x: pos.x,
-    y: pos.y,
-    width: node.width || null,
-    height: node.height || null,
-    content: node.content || null,
+    x: pos.x ?? 0,
+    y: pos.y ?? 0,
+    width: node.width ?? null,
+    height: node.height ?? null,
+    content: safeStr(node.content) || null,
     settings: node.settings ? JSON.stringify(node.settings) : null,
     data: node.data ? JSON.stringify(node.data) : null,
     frames: node.frames ? JSON.stringify(node.frames) : null,
@@ -574,6 +578,23 @@ export function setSettingsBatch(entries) {
   })
   transaction(entries)
   return { changes: entries.length }
+}
+
+// ==========================================
+// 数据库维护
+// ==========================================
+
+export function cleanupOrphanData() {
+  if (!db) return { deletedNodes: 0, deletedConnections: 0 }
+  const delNodes = db.prepare("DELETE FROM nodes WHERE project_id IS NULL OR project_id = '' OR project_id = 'undefined'").run()
+  const delConns = db.prepare("DELETE FROM connections WHERE project_id IS NULL OR project_id = '' OR project_id = 'undefined'").run()
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)')
+    db.exec('VACUUM')
+  } catch (e) {
+    console.warn('[DB] VACUUM 失败:', e.message)
+  }
+  return { deletedNodes: delNodes.changes, deletedConnections: delConns.changes }
 }
 
 export default db

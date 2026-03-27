@@ -83,7 +83,7 @@ export function useGenerationManager({
     const baseUrl = (config?.url || globalApiUrl || DEFAULT_BASE_URL).replace(/\/+$/, '')
 
     if (!apiKey) {
-      alert('Please configure API Key in settings first')
+      alert('请先在设置中配置 API Key')
       setSettingsOpen(true)
       return
     }

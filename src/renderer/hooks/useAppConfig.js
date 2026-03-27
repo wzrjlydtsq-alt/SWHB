@@ -42,62 +42,6 @@ export const useAppConfig = (
   const [apiConfigs, setApiConfigs] = useState(() => {
     let configs = getSettingJSON('tapnow_api_configs', DEFAULT_API_CONFIGS)
 
-    // 确保 gpt-5.2 存在
-    if (!configs.some((c) => c.id === 'gpt-5-2')) {
-      const gpt51Index = configs.findIndex((c) => c.id === 'gpt-5-1')
-      const insertIndex =
-        gpt51Index >= 0
-          ? gpt51Index + 1
-          : configs.findIndex((c) => c.type === 'Chat' && c.id === 'deepseek-v3')
-      configs.splice(insertIndex >= 0 ? insertIndex : configs.length, 0, {
-        id: 'gpt-5-2',
-        provider: 'GPT 5.2',
-        modelName: 'gpt-5.2',
-        type: 'Chat',
-        key: '',
-        url: DEFAULT_BASE_URL
-      })
-    }
-
-    // 确保 sora-2-pro 存在
-    if (!configs.some((c) => c.id === 'sora-2-pro')) {
-      const sora2Index = configs.findIndex((c) => c.id === 'sora-2')
-      configs.splice(sora2Index >= 0 ? sora2Index + 1 : configs.length, 0, {
-        id: 'sora-2-pro',
-        provider: 'Sora 2 Pro',
-        modelName: 'sora-2-pro',
-        type: 'Video',
-        key: '',
-        url: DEFAULT_BASE_URL,
-        durations: ['15s', '25s']
-      })
-    }
-
-    // 确保 gpt-image-1.5 存在
-    if (!configs.some((c) => c.id === 'gpt-image-1.5')) {
-      const gptImageIndex = configs.findIndex((c) => c.id === 'gpt-image')
-      configs.splice(gptImageIndex >= 0 ? gptImageIndex + 1 : configs.length, 0, {
-        id: 'gpt-image-1.5',
-        provider: 'GPT Image 1.5',
-        modelName: 'gpt-image-1.5',
-        type: 'Image',
-        key: '',
-        url: DEFAULT_BASE_URL
-      })
-    }
-
-    // 确保 Grok-3 Video 存在
-    if (!configs.some((c) => c.id === 'grok-3')) {
-      const firstVideoIndex = configs.findIndex((c) => c.type === 'Video')
-      configs.splice(firstVideoIndex >= 0 ? firstVideoIndex : configs.length, 0, {
-        id: 'grok-3',
-        provider: 'Grok3 Video',
-        modelName: 'grok-video-3',
-        type: 'Video',
-        durations: ['8s', '5s']
-      })
-    }
-
     // 过滤已删除模型
     configs = configs.filter((c) => !DELETED_MODEL_IDS.includes(c.id))
 

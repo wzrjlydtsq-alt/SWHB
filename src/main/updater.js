@@ -71,4 +71,36 @@ export function setupUpdater(mainWindow) {
   ipcMain.handle('updater-quit-install', () => {
     autoUpdater.quitAndInstall()
   })
+
+  // 清除 userData 目录内容后再安装更新
+  ipcMain.handle('updater-clear-and-install', async () => {
+    const { app } = require('electron')
+    const fs = require('fs')
+    const path = require('path')
+    const userDataPath = app.getPath('userData')
+
+    try {
+      const entries = fs.readdirSync(userDataPath)
+      for (const entry of entries) {
+        // 跳过正在使用的锁文件
+        if (
+          entry === 'lockfile' ||
+          entry === 'SingletonLock' ||
+          entry === 'SingletonSocket' ||
+          entry === 'SingletonCookie'
+        )
+          continue
+        const fullPath = path.join(userDataPath, entry)
+        try {
+          fs.rmSync(fullPath, { recursive: true, force: true })
+        } catch (e) {
+          console.warn(`[Updater] 无法删除 ${entry}:`, e.message)
+        }
+      }
+      console.log('[Updater] userData 已清除，开始安装更新')
+    } catch (e) {
+      console.error('[Updater] 清除 userData 失败:', e)
+    }
+    autoUpdater.quitAndInstall()
+  })
 }

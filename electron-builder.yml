@@ -1,4 +1,4 @@
-appId: com.electron.xinghezhihui
+appId: cn.lingjingxinghe.xinghezhihui
 productName: 星河智绘
 directories:
   buildResources: build

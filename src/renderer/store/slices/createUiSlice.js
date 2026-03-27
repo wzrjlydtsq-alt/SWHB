@@ -64,8 +64,15 @@ export const createUiSlice = (set) => ({
   setImageSavePath: (imageSavePath) => set({ imageSavePath }),
   videoSavePath: '',
   setVideoSavePath: (videoSavePath) => set({ videoSavePath }),
-  autoSaveInterval: 5,
+  autoSaveInterval: 0,
   setAutoSaveInterval: (autoSaveInterval) => set({ autoSaveInterval }),
+
+  // 高级系统设置
+  enableGpu: true,
+  setEnableGpu: (enableGpu) => set({ enableGpu }),
+  enableUpdateCheck: true,
+  setEnableUpdateCheck: (enableUpdateCheck) => set({ enableUpdateCheck }),
+
   showConnectionAnimations: true,
   setShowConnectionAnimations: (showConnectionAnimations) => set({ showConnectionAnimations }),
   silenceConfirmations: false,

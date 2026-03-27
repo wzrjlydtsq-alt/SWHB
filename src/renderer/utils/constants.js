@@ -16,180 +16,28 @@ export const DEFAULT_API_CONFIGS = [
     modelName: 'gemini-3-pro-preview',
     type: 'Chat',
     key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'gpt-5-1',
-    provider: 'GPT 5.1',
-    modelName: 'gpt-5.1',
-    type: 'Chat',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'gpt-5-2',
-    provider: 'GPT 5.2',
-    modelName: 'gpt-5.2',
-    type: 'Chat',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'deepseek-v3',
-    provider: 'DeepSeek V3',
-    modelName: 'deepseek-v3-1-250821',
-    type: 'Chat',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'gpt-4o',
-    provider: 'GPT-4o',
-    modelName: 'gpt-4o',
-    type: 'Chat',
-    key: '',
-    url: DEFAULT_BASE_URL
+    url: 'https://ai.t8star.cn'
   },
 
   // Image Models
   {
     id: 'nano-banana',
     provider: 'Nano Banana Pro',
-    modelName: 'gemini-3-pro-image-preview',
+    modelName: 'nano-banana-pro',
     type: 'Image',
     key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'nano-banana-2',
-    provider: 'Nano Banana (V2)',
-    modelName: 'gemini-2.5-flash-image',
-    type: 'Image',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'gpt-image',
-    provider: 'GPT-4o Image',
-    modelName: 'gpt-4o-image',
-    type: 'Image',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'gpt-image-1.5',
-    provider: 'GPT Image 1.5',
-    modelName: 'gpt-image-1.5',
-    type: 'Image',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'flux-kontext',
-    provider: 'Flux Kontext',
-    modelName: 'flux-kontext-pro',
-    type: 'Image',
-    key: '',
-    url: DEFAULT_BASE_URL
-  },
-  {
-    id: 'mj-v6',
-    provider: 'Midjourney',
-    modelName: 'MJ V6',
-    type: 'Image',
-    key: '',
-    url: 'https://api.midjourney.com'
-  },
-  // 即梦模型（使用sessionid作为key，首次打开时为空，需要用户输入）
-  {
-    id: 'jimeng-4.5',
-    provider: 'Jimeng 4.5',
-    modelName: 'jimeng-4.5',
-    type: 'Image',
-    key: '',
-    url: JIMENG_API_BASE_URL
-  },
-  {
-    id: 'jimeng-4.1',
-    provider: 'Jimeng 4.1',
-    modelName: 'jimeng-4.1',
-    type: 'Image',
-    key: '',
-    url: JIMENG_API_BASE_URL
-  },
-  {
-    id: 'jimeng-3.1',
-    provider: 'Jimeng 3.1',
-    modelName: 'jimeng-3.1',
-    type: 'Image',
-    key: '',
-    url: JIMENG_API_BASE_URL
+    url: 'https://ai.t8star.cn'
   },
 
   // Video Models
-  {
-    id: 'sora-2',
-    provider: 'Sora 2',
-    modelName: 'sora-2',
-    type: 'Video',
-    key: '',
-    url: DEFAULT_BASE_URL,
-    durations: ['5s', '10s', '15s']
-  },
-  {
-    id: 'sora-2-pro',
-    provider: 'Sora 2 Pro',
-    modelName: 'sora-2-pro',
-    type: 'Video',
-    key: '',
-    url: DEFAULT_BASE_URL,
-    durations: ['15s', '25s']
-  },
-  {
-    id: 'seedance-2',
-    provider: 'Seedance 2.0',
-    modelName: 'doubao-seedance-2-0-260128',
-    type: 'Video',
-    key: '',
-    url: '',
-    durations: ['5s', '8s', '11s', '15s']
-  },
   {
     id: 'doubao-seedance-2',
     provider: 'doubao',
     modelName: 'doubao-seedance-2',
     type: 'Video',
     key: '',
-    url: '',
+    url: 'https://lingjingxinghe.cn',
     durations: ['5s', '8s', '11s', '15s']
-  },
-  {
-    id: 'veo3.1-components',
-    provider: 'Google Veo 3-Components',
-    modelName: 'veo3.1-components',
-    type: 'Video',
-    key: '',
-    url: 'https://ai.t8star.cn',
-    durations: ['8s']
-  },
-  // Veo 3.1（首尾帧）：images 最多两个，分别为首帧/尾帧
-  {
-    id: 'veo3.1',
-    provider: 'Google Veo 3.1',
-    modelName: 'veo3.1',
-    type: 'Video',
-    key: '',
-    url: 'https://ai.t8star.cn',
-    durations: ['8s']
-  },
-  {
-    id: 'grok-3',
-    provider: 'Grok3 Video',
-    modelName: 'grok-video-3',
-    type: 'Video',
-    key: '',
-    url: 'https://ai.t8star.cn',
-    durations: ['8s', '5s']
   }
 ]
 
@@ -288,7 +136,26 @@ export const DELETED_MODEL_IDS = [
   'jimeng', // Jimeng Video
   'hailuo-02',
   'kling-v1-6',
-  'wan-2.5'
+  'wan-2.5',
+  // 精简后移除的模型
+  'gpt-5-1',
+  'gpt-5-2',
+  'deepseek-v3',
+  'gpt-4o',
+  'nano-banana-2',
+  'gpt-image',
+  'gpt-image-1.5',
+  'flux-kontext',
+  'mj-v6',
+  'jimeng-4.5',
+  'jimeng-4.1',
+  'jimeng-3.1',
+  'sora-2',
+  'sora-2-pro',
+  'seedance-2',
+  'veo3.1-components',
+  'veo3.1',
+  'grok-3'
 ]
 
 export const getRatiosForModel = (modelId) => {

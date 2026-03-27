@@ -1,9 +1,15 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, net, session } from 'electron'
+/**
+ * 星河智绘 (Xinghe Zhihui)
+ * Copyright (c) 2025-2026 成都灵境星河动漫科技有限公司
+ * 开发者: 郭瑞凡 (Guo Ruifan)
+ * All rights reserved.
+ */
+import { app, shell, BrowserWindow, ipcMain, protocol, net, session, dialog } from 'electron'
 import { join } from 'path'
 import path from 'path'
 import fs from 'fs'
 import { pathToFileURL } from 'url'
-import './database.js'
+import { getSetting } from './database.js'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.ico?asset'
 import { setupIpcHandlers } from './ipcHandlers.js'
@@ -17,9 +23,16 @@ process.on('unhandledRejection', (reason) => {
   console.error('[主进程] 未处理的 Promise 拒绝:', reason)
 })
 
-// ========== GPU 渲染加速 ==========
-app.commandLine.appendSwitch('enable-gpu-rasterization')
-app.commandLine.appendSwitch('enable-zero-copy')
+// ========== GPU 渲染加速控制 ==========
+const enableGpu = getSetting('tapnow_enableGpu') !== 'false'
+if (!enableGpu) {
+  app.disableHardwareAcceleration()
+  console.log('[主进程] 硬件图形加速(GPU) 已依据用户设置被安全禁用')
+} else {
+  app.commandLine.appendSwitch('enable-gpu-rasterization')
+  app.commandLine.appendSwitch('enable-zero-copy')
+  console.log('[主进程] 硬件图形加速(GPU) 开启状态激活')
+}
 
 function createWindow() {
   // Create the browser window.
@@ -91,7 +104,12 @@ function createWindow() {
   }
 
   // Hook up the auto updater
-  setupUpdater(mainWindow)
+  const enableUpdateCheck = getSetting('tapnow_enableUpdateCheck') !== 'false'
+  if (enableUpdateCheck) {
+    setupUpdater(mainWindow)
+  } else {
+    console.log('[主进程] 自动检查更新逻辑已被用户禁用')
+  }
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -352,6 +370,63 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   setupIpcHandlers()
+
+  // ========== 版本更新检测：首次启动新版本时提示清除旧数据 ==========
+  const versionFilePath = path.join(app.getPath('userData'), '.app_version')
+  const currentVersion = app.getVersion()
+  let previousVersion = null
+  try {
+    if (fs.existsSync(versionFilePath)) {
+      previousVersion = fs.readFileSync(versionFilePath, 'utf-8').trim()
+    }
+  } catch (e) {
+    console.warn('[版本检测] 读取旧版本号失败:', e.message)
+  }
+
+  if (previousVersion && previousVersion !== currentVersion) {
+    console.log(`[版本检测] 检测到版本变更: ${previousVersion} → ${currentVersion}`)
+    const userDataPath = app.getPath('userData')
+    const result = dialog.showMessageBoxSync({
+      type: 'question',
+      buttons: ['清除旧数据并重启', '保留旧数据继续'],
+      defaultId: 1,
+      cancelId: 1,
+      title: '检测到版本更新',
+      message: `应用已从 v${previousVersion} 更新到 v${currentVersion}`,
+      detail: `是否清除旧版本的应用数据？\n\n数据目录: ${userDataPath}\n\n清除后应用将以全新状态启动。如果遇到旧版本的兼容问题，建议清除。`
+    })
+
+    if (result === 0) {
+      // 用户选择清除
+      console.log('[版本检测] 用户选择清除旧数据，开始删除...')
+      try {
+        const entries = fs.readdirSync(userDataPath)
+        for (const entry of entries) {
+          const entryPath = path.join(userDataPath, entry)
+          try {
+            const stat = fs.statSync(entryPath)
+            if (stat.isDirectory()) {
+              fs.rmSync(entryPath, { recursive: true, force: true })
+            } else {
+              fs.unlinkSync(entryPath)
+            }
+          } catch (e) {
+            console.warn(`[版本检测] 删除失败: ${entryPath}`, e.message)
+          }
+        }
+        console.log('[版本检测] 旧数据清除完成')
+      } catch (e) {
+        console.error('[版本检测] 清理数据目录失败:', e)
+      }
+    }
+  }
+
+  // 写入当前版本号（无论是否清除）
+  try {
+    fs.writeFileSync(versionFilePath, currentVersion, 'utf-8')
+  } catch (e) {
+    console.warn('[版本检测] 写入版本号失败:', e.message)
+  }
 
   createWindow()
 

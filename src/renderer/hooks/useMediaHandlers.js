@@ -4,6 +4,47 @@ import { splitGridImage } from '../services/midjourneyService.js'
 import { detectScenesAndCapture } from '../services/videoProcessingService.js'
 
 export const useMediaHandlers = ({ setNodes, nodesMap, selectedNodeIdsRef, screenToWorld }) => {
+  const updateNodeContentWithUrl = async (nodeId, finalUrl, fileType, updateFn) => {
+    let dimensions = { w: 0, h: 0 }
+    if (fileType.startsWith('image')) {
+      try {
+        dimensions = await getImageDimensions(finalUrl)
+      } catch (err) {
+        console.error('Failed to parse dimensions:', err)
+      }
+    }
+
+    updateFn((prev) =>
+      prev.map((n) => {
+        if (n.id === nodeId) {
+          let finalW = dimensions.w > 0 ? dimensions.w : n.width
+          let finalH = dimensions.h > 0 ? dimensions.h : n.height
+
+          if (dimensions.w > 0 && dimensions.h > 0) {
+            const maxDim = 400
+            if (finalW > maxDim || finalH > maxDim) {
+              if (finalW > finalH) {
+                finalH = Math.round(finalH * (maxDim / finalW))
+                finalW = maxDim
+              } else {
+                finalW = Math.round(finalW * (maxDim / finalH))
+                finalH = maxDim
+              }
+            }
+          }
+
+          return {
+            ...n,
+            content: finalUrl,
+            dimensions,
+            width: finalW,
+            height: finalH
+          }
+        }
+        return n
+      })
+    )
+  }
   const handleFileUpload = useCallback(
     async (nodeId, e) => {
       if (e.preventDefault) e.preventDefault()
@@ -12,12 +53,29 @@ export const useMediaHandlers = ({ setNodes, nodesMap, selectedNodeIdsRef, scree
       if (!file) return
 
       try {
-        // Read the file entirely into memory to stream to IPC
+        // 如果文件有本地绝对路径 (Electron 特性)，直接传给主进程负责拷贝，避免将大图片读入内存造成 OOM
+        if (file.path) {
+          const response = await window.api.invoke('cache:copy-file', {
+            id: `upload_${Date.now()}`,
+            sourcePath: file.path,
+            category: 'user_upload',
+            type: file.type.startsWith('video') ? 'video' : 'image'
+          })
+
+          if (response?.success && response.url) {
+            updateNodeContentWithUrl(nodeId, response.url, file.type, setNodes)
+          } else {
+            console.error('IPC Asset Copy failed:', response?.error)
+            alert('文件存入失败: ' + (response?.error || '未知错误'))
+          }
+          return
+        }
+
+        // 回退逻辑：针对由剪贴板纯构建出的无路径 Blob/File，退回走 FileReader + Base64
         const reader = new FileReader()
         reader.onload = async (event) => {
-          const base64Content = event.target.result // data:image/png;base64,...
+          const base64Content = event.target.result
 
-          // Push the payload to the main process cache
           const response = await window.api.invoke('cache:save-cache', {
             id: `upload_${Date.now()}`,
             content: base64Content,
@@ -27,47 +85,7 @@ export const useMediaHandlers = ({ setNodes, nodesMap, selectedNodeIdsRef, scree
           })
 
           if (response?.success && response.url) {
-            const finalUrl = response.url
-
-            let dimensions = { w: 0, h: 0 }
-            if (file.type.startsWith('image')) {
-              try {
-                dimensions = await getImageDimensions(finalUrl)
-              } catch (err) {
-                console.error('Failed to parse dimensions:', err)
-              }
-            }
-
-            setNodes((prev) =>
-              prev.map((n) => {
-                if (n.id === nodeId) {
-                  let finalW = dimensions.w > 0 ? dimensions.w : n.width
-                  let finalH = dimensions.h > 0 ? dimensions.h : n.height
-
-                  if (dimensions.w > 0 && dimensions.h > 0) {
-                    const maxDim = 400
-                    if (finalW > maxDim || finalH > maxDim) {
-                      if (finalW > finalH) {
-                        finalH = Math.round(finalH * (maxDim / finalW))
-                        finalW = maxDim
-                      } else {
-                        finalW = Math.round(finalW * (maxDim / finalH))
-                        finalH = maxDim
-                      }
-                    }
-                  }
-
-                  return {
-                    ...n,
-                    content: finalUrl,
-                    dimensions,
-                    width: finalW,
-                    height: finalH
-                  }
-                }
-                return n
-              })
-            )
+            updateNodeContentWithUrl(nodeId, response.url, file.type, setNodes)
           } else {
             console.error('IPC Asset Cache failed:', response?.error)
             alert('文件缓存失败: ' + (response?.error || '未知错误'))
@@ -75,7 +93,7 @@ export const useMediaHandlers = ({ setNodes, nodesMap, selectedNodeIdsRef, scree
         }
         reader.readAsDataURL(file)
       } catch (error) {
-        console.error('File reading failed:', error)
+        console.error('File reading/copying failed:', error)
       }
     },
     [setNodes]
@@ -86,6 +104,35 @@ export const useMediaHandlers = ({ setNodes, nodesMap, selectedNodeIdsRef, scree
       if (!file) return
 
       try {
+        if (file.path) {
+          const response = await window.api.invoke('cache:copy-file', {
+            id: `upload_audio_${Date.now()}`,
+            sourcePath: file.path,
+            category: 'user_upload',
+            type: 'audio'
+          })
+
+          if (response?.success && response.url) {
+            setNodes((prev) =>
+              prev.map((n) => {
+                if (n.id === nodeId) {
+                  return {
+                    ...n,
+                    content: response.url,
+                    fileName: file.name,
+                    filePath: response.path || response.url
+                  }
+                }
+                return n
+              })
+            )
+          } else {
+            console.error('IPC Asset Copy failed:', response?.error)
+            alert('音频缓存失败: ' + (response?.error || '未知错误'))
+          }
+          return
+        }
+
         const reader = new FileReader()
         reader.onload = async (event) => {
           const base64Content = event.target.result
@@ -119,7 +166,7 @@ export const useMediaHandlers = ({ setNodes, nodesMap, selectedNodeIdsRef, scree
         }
         reader.readAsDataURL(file)
       } catch (error) {
-        console.error('Audio file reading failed:', error)
+        console.error('Audio file reading/copying failed:', error)
       }
     },
     [setNodes]

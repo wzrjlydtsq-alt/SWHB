@@ -9,7 +9,7 @@
 
 import { createRoot } from 'react-dom/client'
 
-import './style.css'
+import './styles/global.css'
 import './styles/CanvasBoard.css'
 
 import { ErrorBoundary } from './components/ErrorBoundary.jsx'

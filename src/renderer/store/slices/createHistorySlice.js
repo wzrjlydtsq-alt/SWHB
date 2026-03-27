@@ -38,11 +38,13 @@ export const createHistorySlice = (set, get) => ({
     _historySaveTimer = setTimeout(() => {
       try {
         const currentHistory = get().history
+        const projectId = get().currentProject?.id
+        const projectHistoryKey = projectId ? `tapnow_history_v2_${projectId}` : 'tapnow_history_v2'
         const sanitized = sanitizeHistoryForSave(currentHistory)
         const json = JSON.stringify(sanitized)
         if (window.dbAPI?.settings) {
-          window.dbAPI.settings.set('tapnow_history_v2', json).catch((err) => {
-            console.error('[History] 写入 SQLite 失败:', err)
+          window.dbAPI.settings.set(projectHistoryKey, json).catch((err) => {
+            console.error(`[History] 写入 SQLite 失败 (${projectHistoryKey}):`, err)
           })
         }
       } catch (err) {

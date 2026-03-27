@@ -1,12 +1,32 @@
+import { lazy, Suspense } from 'react'
 import { Lightbox } from './Lightbox.jsx'
-import { CreateCharacterModal } from './modals/CreateCharacterModal.jsx'
-import { ProjectListModal } from './modals/ProjectListModal.jsx'
-import { SettingsModal } from './modals/SettingsModal.jsx'
-import { BatchModal } from './modals/BatchModal.jsx'
+
+// 懒加载弹窗组件 — 只在打开时才下载
+const CreateCharacterModal = lazy(() =>
+  import('./modals/CreateCharacterModal.jsx').then((m) => ({
+    default: m.CreateCharacterModal
+  }))
+)
+const ProjectListModal = lazy(() =>
+  import('./modals/ProjectListModal.jsx').then((m) => ({
+    default: m.ProjectListModal
+  }))
+)
+const SettingsModal = lazy(() =>
+  import('./modals/SettingsModal.jsx').then((m) => ({
+    default: m.SettingsModal
+  }))
+)
+const BatchModal = lazy(() =>
+  import('./modals/BatchModal.jsx').then((m) => ({
+    default: m.BatchModal
+  }))
+)
 
 /**
  * ModalManager — 弹窗调度器
  * 各弹窗实现已拆分到 ./modals/ 目录下的独立组件
+ * 使用 React.lazy 懒加载，只在打开弹窗时才下载代码
  */
 export function ModalManager({
   apiConfigs,
@@ -43,6 +63,7 @@ export function ModalManager({
   projects,
   handleLoadFromHistory,
   handleDeleteHistoryProject,
+  handleSaveAndCreateNew,
   lightboxItem,
   createCharacterOpen,
   setCreateCharacterOpen,
@@ -68,33 +89,35 @@ export function ModalManager({
   historyMap
 }) {
   return (
-    <>
-      <CreateCharacterModal
-        createCharacterOpen={createCharacterOpen}
-        setCreateCharacterOpen={setCreateCharacterOpen}
-        createCharacterVideoSourceType={createCharacterVideoSourceType}
-        setCreateCharacterVideoSourceType={setCreateCharacterVideoSourceType}
-        createCharacterVideoUrl={createCharacterVideoUrl}
-        setCreateCharacterVideoUrl={setCreateCharacterVideoUrl}
-        createCharacterSelectedTaskId={createCharacterSelectedTaskId}
-        setCreateCharacterSelectedTaskId={setCreateCharacterSelectedTaskId}
-        createCharacterHistoryDropdownOpen={createCharacterHistoryDropdownOpen}
-        setCreateCharacterHistoryDropdownOpen={setCreateCharacterHistoryDropdownOpen}
-        createCharacterStartSecond={createCharacterStartSecond}
-        setCreateCharacterStartSecond={setCreateCharacterStartSecond}
-        createCharacterEndSecond={createCharacterEndSecond}
-        setCreateCharacterEndSecond={setCreateCharacterEndSecond}
-        createCharacterEndpoint={createCharacterEndpoint}
-        setCreateCharacterEndpoint={setCreateCharacterEndpoint}
-        createCharacterSubmitting={createCharacterSubmitting}
-        setCreateCharacterSubmitting={setCreateCharacterSubmitting}
-        createCharacterVideoError={createCharacterVideoError}
-        setCreateCharacterVideoError={setCreateCharacterVideoError}
-        createCharacter={createCharacter}
-        historyMap={historyMap}
-        history={history}
-        apiConfigs={apiConfigs}
-      />
+    <Suspense fallback={null}>
+      {createCharacterOpen && (
+        <CreateCharacterModal
+          createCharacterOpen={createCharacterOpen}
+          setCreateCharacterOpen={setCreateCharacterOpen}
+          createCharacterVideoSourceType={createCharacterVideoSourceType}
+          setCreateCharacterVideoSourceType={setCreateCharacterVideoSourceType}
+          createCharacterVideoUrl={createCharacterVideoUrl}
+          setCreateCharacterVideoUrl={setCreateCharacterVideoUrl}
+          createCharacterSelectedTaskId={createCharacterSelectedTaskId}
+          setCreateCharacterSelectedTaskId={setCreateCharacterSelectedTaskId}
+          createCharacterHistoryDropdownOpen={createCharacterHistoryDropdownOpen}
+          setCreateCharacterHistoryDropdownOpen={setCreateCharacterHistoryDropdownOpen}
+          createCharacterStartSecond={createCharacterStartSecond}
+          setCreateCharacterStartSecond={setCreateCharacterStartSecond}
+          createCharacterEndSecond={createCharacterEndSecond}
+          setCreateCharacterEndSecond={setCreateCharacterEndSecond}
+          createCharacterEndpoint={createCharacterEndpoint}
+          setCreateCharacterEndpoint={setCreateCharacterEndpoint}
+          createCharacterSubmitting={createCharacterSubmitting}
+          setCreateCharacterSubmitting={setCreateCharacterSubmitting}
+          createCharacterVideoError={createCharacterVideoError}
+          setCreateCharacterVideoError={setCreateCharacterVideoError}
+          createCharacter={createCharacter}
+          historyMap={historyMap}
+          history={history}
+          apiConfigs={apiConfigs}
+        />
+      )}
 
       <Lightbox
         item={lightboxItem}
@@ -127,48 +150,55 @@ export function ModalManager({
         }}
       />
 
-      <ProjectListModal
-        projectListOpen={projectListOpen}
-        setProjectListOpen={setProjectListOpen}
-        projects={projects}
-        handleLoadFromHistory={handleLoadFromHistory}
-        handleDeleteHistoryProject={handleDeleteHistoryProject}
-      />
+      {projectListOpen && (
+        <ProjectListModal
+          projectListOpen={projectListOpen}
+          setProjectListOpen={setProjectListOpen}
+          projects={projects}
+          handleLoadFromHistory={handleLoadFromHistory}
+          handleDeleteHistoryProject={handleDeleteHistoryProject}
+          handleSaveAndCreateNew={handleSaveAndCreateNew}
+        />
+      )}
 
-      <SettingsModal
-        settingsOpen={settingsOpen}
-        setSettingsOpen={setSettingsOpen}
-        apiConfigs={apiConfigs}
-        globalApiKey={globalApiKey}
-        setGlobalApiKey={setGlobalApiKey}
-        globalApiUrl={globalApiUrl}
-        setGlobalApiUrl={setGlobalApiUrl}
-        jimengSessionId={jimengSessionId}
-        setJimengSessionId={setJimengSessionId}
-        jimengUseLocalFile={jimengUseLocalFile}
-        setJimengUseLocalFile={setJimengUseLocalFile}
-        deleteApiConfig={deleteApiConfig}
-        updateApiConfig={updateApiConfig}
-        testApiConnection={testApiConnection}
-        apiTesting={apiTesting}
-        apiStatus={apiStatus}
-        addNewModel={addNewModel}
-        getStatusColor={getStatusColor}
-      />
+      {settingsOpen && (
+        <SettingsModal
+          settingsOpen={settingsOpen}
+          setSettingsOpen={setSettingsOpen}
+          apiConfigs={apiConfigs}
+          globalApiKey={globalApiKey}
+          setGlobalApiKey={setGlobalApiKey}
+          globalApiUrl={globalApiUrl}
+          setGlobalApiUrl={setGlobalApiUrl}
+          jimengSessionId={jimengSessionId}
+          setJimengSessionId={setJimengSessionId}
+          jimengUseLocalFile={jimengUseLocalFile}
+          setJimengUseLocalFile={setJimengUseLocalFile}
+          deleteApiConfig={deleteApiConfig}
+          updateApiConfig={updateApiConfig}
+          testApiConnection={testApiConnection}
+          apiTesting={apiTesting}
+          apiStatus={apiStatus}
+          addNewModel={addNewModel}
+          getStatusColor={getStatusColor}
+        />
+      )}
 
-      <BatchModal
-        batchModalOpen={batchModalOpen}
-        setBatchModalOpen={setBatchModalOpen}
-        batchSelectedIds={batchSelectedIds}
-        setBatchSelectedIds={setBatchSelectedIds}
-        history={history}
-        setHistory={setHistory}
-        addNode={addNode}
-        getImageDimensions={getImageDimensions}
-        isVideoUrl={isVideoUrl}
-        screenToWorld={screenToWorld}
-        setLightboxItem={setLightboxItem}
-      />
-    </>
+      {batchModalOpen && (
+        <BatchModal
+          batchModalOpen={batchModalOpen}
+          setBatchModalOpen={setBatchModalOpen}
+          batchSelectedIds={batchSelectedIds}
+          setBatchSelectedIds={setBatchSelectedIds}
+          history={history}
+          setHistory={setHistory}
+          addNode={addNode}
+          getImageDimensions={getImageDimensions}
+          isVideoUrl={isVideoUrl}
+          screenToWorld={screenToWorld}
+          setLightboxItem={setLightboxItem}
+        />
+      )}
+    </Suspense>
   )
 }

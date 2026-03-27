@@ -1,4 +1,4 @@
-import { ipcMain, app, dialog, BrowserWindow, shell, safeStorage } from 'electron'
+import { ipcMain, app, dialog, BrowserWindow, shell, safeStorage, clipboard, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { globalTaskQueue } from './engine/TaskQueue.js'
@@ -28,7 +28,8 @@ import {
   setSetting,
   deleteSetting,
   getAllSettings,
-  setSettingsBatch
+  setSettingsBatch,
+  cleanupOrphanData
 } from './database.js'
 import { generateThumbnail } from './thumbnailService.js'
 
@@ -143,7 +144,84 @@ export function setupIpcHandlers() {
       fs.writeFileSync(filePath, base64Data, 'base64')
       return { success: true, url: filePath, path: filePath }
     } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('cache:copy-file', (event, { id, sourcePath, category, type }) => {
+    try {
+      if (!id || !sourcePath) return { success: false, error: '缺少必要参数' }
+      if (!fs.existsSync(sourcePath)) return { success: false, error: '源文件不存在' }
+
+      const isVideo = type === 'video'
+      const targetDir = isVideo ? currentConfig.video_save_path : currentConfig.image_save_path
+      const ext = path.extname(sourcePath) || (isVideo ? '.mp4' : '.jpg')
+      const fileName = `${category}_${id.replace(/[^a-zA-Z0-9_-]/g, '')}${ext}`
+      const filePath = path.join(targetDir, fileName)
+
+      fs.copyFileSync(sourcePath, filePath)
+      const xingheUrl = `xinghe://local/?path=${encodeURIComponent(filePath)}`
+
+      // 对于图片类也可以尝试生成缩略图，这里简化直接返回
+      return { success: true, url: xingheUrl, path: filePath }
+    } catch (e) {
       console.error(e)
+      return { success: false, error: e.message }
+    }
+  })
+
+  // 复制图片到系统剪贴板（支持本地路径、xinghe:// 协议、远程 URL）
+  ipcMain.handle('clipboard:copy-image', async (event, { filePath }) => {
+    try {
+      if (!filePath) return { success: false, error: '缺少文件路径' }
+
+      // 远程 URL：直接下载到内存并写入剪贴板
+      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+        const res = await fetch(filePath)
+        if (!res.ok) return { success: false, error: `下载失败: ${res.statusText}` }
+        const buffer = Buffer.from(await res.arrayBuffer())
+        const img = nativeImage.createFromBuffer(buffer)
+        if (img.isEmpty()) return { success: false, error: '无法解析远程图片' }
+        clipboard.writeImage(img)
+        return { success: true }
+      }
+
+      // 解析路径：支持 xinghe://local/?path=... 协议
+      let realPath = filePath
+      if (realPath.startsWith('xinghe://local')) {
+        const match = realPath.match(/[?&]path=([^&]+)/)
+        if (match) realPath = decodeURIComponent(match[1])
+      }
+      if (realPath.startsWith('xinghe://')) {
+        realPath = realPath.replace(/^xinghe:\/\//, '')
+      }
+
+      // 尝试多种路径策略定位文件
+      let absPath = null
+      if (path.isAbsolute(realPath) && fs.existsSync(realPath)) {
+        absPath = realPath
+      }
+      if (!absPath) {
+        const userDataPath = path.join(app.getPath('userData'), 'LocalCache', realPath)
+        if (fs.existsSync(userDataPath)) absPath = userDataPath
+      }
+      if (!absPath) {
+        const fname = realPath.split(/[/\\]/).pop()
+        for (const sub of ['images', 'videos', '']) {
+          const tryPath = path.join(app.getPath('userData'), 'LocalCache', sub, fname)
+          if (fs.existsSync(tryPath)) { absPath = tryPath; break }
+        }
+      }
+
+      if (!absPath) return { success: false, error: `文件不存在: ${realPath}` }
+
+      const img = nativeImage.createFromPath(absPath)
+      if (img.isEmpty()) return { success: false, error: '无法读取图片（格式不支持或文件损坏）' }
+
+      clipboard.writeImage(img)
+      return { success: true }
+    } catch (e) {
+      console.error('[clipboard:copy-image] Error:', e)
       return { success: false, error: e.message }
     }
   })
@@ -205,6 +283,205 @@ export function setupIpcHandlers() {
       return { success: true }
     } catch (e) {
       console.error('Failed to show item in folder:', e)
+      return { success: false, error: e.message }
+    }
+  })
+
+  // 另存为：弹出系统对话框，将文件复制到用户选择的位置
+  ipcMain.handle('system:save-file-as', async (event, { sourcePath, defaultName }) => {
+    try {
+      // 解析真实的文件路径
+      let realPath = sourcePath
+
+      // 处理 xinghe://local/?path=... 协议
+      if (realPath.startsWith('xinghe://local')) {
+        const match = realPath.match(/[?&]path=([^&]+)/)
+        if (match) {
+          realPath = decodeURIComponent(match[1])
+        }
+      }
+
+      // 处理 xinghe:// 其他形式
+      if (realPath.startsWith('xinghe://')) {
+        realPath = realPath.replace(/^xinghe:\/\//, '')
+      }
+
+      // 提取纯文件名作为默认保存名称
+      const pureFileName = (defaultName || realPath).split(/[/\\]/).pop().split('?')[0]
+      // 处理 URL 编码的文件名
+      const decodedFileName = decodeURIComponent(pureFileName)
+
+      const ext = path.extname(decodedFileName).toLowerCase()
+      const filters = []
+      const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+      const videoExts = ['.mp4', '.webm', '.mov']
+      if (imageExts.includes(ext)) {
+        filters.push({ name: '图片文件', extensions: [ext.slice(1)] })
+      } else if (videoExts.includes(ext)) {
+        filters.push({ name: '视频文件', extensions: [ext.slice(1)] })
+      }
+      filters.push({ name: '所有文件', extensions: ['*'] })
+
+      const { dialog } = require('electron')
+      const result = await dialog.showSaveDialog({
+        title: '另存为',
+        defaultPath: decodedFileName,
+        filters
+      })
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true }
+      }
+
+      // 尝试多种路径策略定位源文件
+      let absSource = null
+
+      // 策略 1: realPath 已是有效的绝对路径
+      if (path.isAbsolute(realPath) && fs.existsSync(realPath)) {
+        absSource = realPath
+      }
+
+      // 策略 2: 拼接 userData 目录
+      if (!absSource) {
+        const userDataPath = path.join(app.getPath('userData'), realPath)
+        if (fs.existsSync(userDataPath)) {
+          absSource = userDataPath
+        }
+      }
+
+      // 策略 3: 在 LocalCache 子目录下查找
+      if (!absSource) {
+        const localCachePath = path.join(app.getPath('userData'), 'LocalCache', realPath)
+        if (fs.existsSync(localCachePath)) {
+          absSource = localCachePath
+        }
+      }
+
+      // 策略 4: 只用文件名在 LocalCache/images 和 LocalCache/videos 下查找
+      if (!absSource) {
+        const fname = realPath.split(/[/\\]/).pop()
+        for (const sub of ['images', 'videos', '']) {
+          const tryPath = path.join(app.getPath('userData'), 'LocalCache', sub, fname)
+          if (fs.existsSync(tryPath)) {
+            absSource = tryPath
+            break
+          }
+        }
+      }
+
+      // 策略 5: 对于远程 URL，下载内容
+      if (!absSource && (sourcePath.startsWith('http') || sourcePath.startsWith('xinghe://'))) {
+        const { net } = require('electron')
+        const url = sourcePath.startsWith('xinghe://')
+          ? sourcePath.replace('xinghe://', 'http://localhost:7860/')
+          : sourcePath
+        const response = await net.fetch(url)
+        const arrayBuf = await response.arrayBuffer()
+        fs.writeFileSync(result.filePath, Buffer.from(arrayBuf))
+        return { success: true, path: result.filePath }
+      }
+
+      if (absSource) {
+        fs.copyFileSync(absSource, result.filePath)
+        return { success: true, path: result.filePath }
+      }
+
+      console.error('[save-file-as] 无法定位源文件:', { sourcePath, realPath })
+      return { success: false, error: `源文件不存在: ${realPath}` }
+    } catch (e) {
+      console.error('Save file as failed:', e)
+      return { success: false, error: e.message }
+    }
+  })
+
+  // 视频拼接：使用 FFmpeg 将多个视频合并为一个
+  ipcMain.handle('system:concat-videos', async (event, { videoPaths, outputName }) => {
+    const { execFile } = require('child_process')
+    const os = require('os')
+
+    try {
+      // 解析所有视频的真实路径
+      const resolvedPaths = videoPaths.map((vp) => {
+        let rp = vp
+        if (rp.startsWith('xinghe://local')) {
+          const match = rp.match(/[?&]path=([^&]+)/)
+          if (match) rp = decodeURIComponent(match[1])
+        }
+        if (rp.startsWith('xinghe://')) rp = rp.replace(/^xinghe:\/\//, '')
+
+        // 在 LocalCache 中查找
+        if (!fs.existsSync(rp)) {
+          const fname = rp.split(/[/\\]/).pop()
+          for (const sub of ['videos', 'images', '']) {
+            const tryP = path.join(app.getPath('userData'), 'LocalCache', sub, fname)
+            if (fs.existsSync(tryP)) { rp = tryP; break }
+          }
+        }
+        return rp
+      })
+
+      // 检查所有文件是否存在
+      for (const p of resolvedPaths) {
+        if (!fs.existsSync(p)) {
+          return { success: false, error: `文件不存在: ${p}` }
+        }
+      }
+
+      // 创建 concat 列表文件
+      const tmpDir = os.tmpdir()
+      const listFile = path.join(tmpDir, `concat_${Date.now()}.txt`)
+      const listContent = resolvedPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n')
+      fs.writeFileSync(listFile, listContent, 'utf-8')
+
+      // 输出路径
+      const outputDir = path.join(app.getPath('userData'), 'LocalCache', 'videos')
+      if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
+      const outputPath = path.join(outputDir, outputName || `concat_${Date.now()}.mp4`)
+
+      // 调用 FFmpeg
+      const ffmpegBin = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
+      return new Promise((resolve) => {
+        execFile(
+          ffmpegBin,
+          ['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outputPath],
+          { timeout: 120000 },
+          (err, stdout, stderr) => {
+            // 清理临时文件
+            try { fs.unlinkSync(listFile) } catch (_e) { /* ignore */ }
+
+            if (err) {
+              console.error('[concat-videos] FFmpeg error:', err.message, stderr)
+              // 检查是否 FFmpeg 未安装
+              if (err.code === 'ENOENT') {
+                return resolve({
+                  success: false,
+                  error: '未检测到 FFmpeg，请先安装 FFmpeg 并确保已添加到系统 PATH'
+                })
+              }
+              return resolve({ success: false, error: `拼接失败: ${err.message}` })
+            }
+
+            // 弹出另存为对话框
+            const win = BrowserWindow.getFocusedWindow()
+            dialog
+              .showSaveDialog(win, {
+                title: '导出拼接视频',
+                defaultPath: path.join(app.getPath('downloads'), outputName || 'director_output.mp4'),
+                filters: [{ name: '视频文件', extensions: ['mp4'] }]
+              })
+              .then((result) => {
+                if (!result.canceled && result.filePath) {
+                  fs.copyFileSync(outputPath, result.filePath)
+                  resolve({ success: true, path: result.filePath })
+                } else {
+                  resolve({ success: true, path: outputPath, exported: false })
+                }
+              })
+              .catch((e) => resolve({ success: false, error: e.message }))
+          }
+        )
+      })
+    } catch (e) {
+      console.error('[concat-videos] Error:', e)
       return { success: false, error: e.message }
     }
   })
@@ -367,6 +644,9 @@ export function setupIpcHandlers() {
   ipcMain.handle('db:settings:delete', (_, key) => deleteSetting(key))
   ipcMain.handle('db:settings:getAll', () => getAllSettings())
   ipcMain.handle('db:settings:setBatch', (_, entries) => setSettingsBatch(entries))
+
+  // 数据库维护
+  ipcMain.handle('db:maintenance:cleanup', () => cleanupOrphanData())
 
   // --- 安全存储 (OS 级加密) ---
   ipcMain.handle('safeStorage:isAvailable', () => safeStorage.isEncryptionAvailable())
