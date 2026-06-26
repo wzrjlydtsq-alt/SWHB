@@ -1,0 +1,451 @@
+Nano-banana-2(Pro)(Generations，推荐对接)
+# Nano-banana-2(Pro)(Generations，推荐对接)
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.0.1
+info:
+  title: ''
+  description: ''
+  version: 1.0.0
+paths:
+  /v1/images/generations:
+    post:
+      summary: Nano-banana-2(Pro)(Generations，推荐对接)
+      deprecated: false
+      description: ''
+      tags:
+        - 绘图模型/OpenAI Dall-e 格式
+      parameters:
+        - name: Authorization
+          in: header
+          description: ''
+          required: false
+          example: Bearer {{YOUR_API_KEY}}
+          schema:
+            type: string
+            default: Bearer {{YOUR_API_KEY}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                  x-apifox-mock: nano-banana-2
+                prompt:
+                  type: string
+                  x-apifox-mock: 一只猫
+                response_format:
+                  type: string
+                  description: url 或 b64_json
+                  x-apifox-mock: 'url '
+                aspect_ratio:
+                  type: string
+                  x-apifox-mock: '4:3'
+                  enum:
+                    - '4:3'
+                    - '3:4'
+                    - '16:9'
+                    - '9:16'
+                    - '2:3'
+                    - '3:2'
+                    - '1:1'
+                    - '4:5'
+                    - '5:4'
+                    - '21:9'
+                  x-apifox-enum:
+                    - value: '4:3'
+                      name: ''
+                      description: ''
+                    - value: '3:4'
+                      name: ''
+                      description: ''
+                    - value: '16:9'
+                      name: ''
+                      description: ''
+                    - value: '9:16'
+                      name: ''
+                      description: ''
+                    - value: '2:3'
+                      name: ''
+                      description: ''
+                    - value: '3:2'
+                      name: ''
+                      description: ''
+                    - value: '1:1'
+                      name: ''
+                      description: ''
+                    - value: '4:5'
+                      name: ''
+                      description: ''
+                    - value: '5:4'
+                      name: ''
+                      description: ''
+                    - value: '21:9'
+                      name: ''
+                      description: ''
+                image:
+                  type: array
+                  items:
+                    type: string
+                  description: 参考图数组，url 或 b64_json
+                image_size:
+                  type: string
+                  x-apifox-mock: 4K
+                  enum:
+                    - 1K
+                    - 2K
+                    - 4K
+                  x-apifox-enum:
+                    - value: 1K
+                      name: ''
+                      description: ''
+                    - value: 2K
+                      name: ''
+                      description: ''
+                    - value: 4K
+                      name: ''
+                      description: ''
+                  description: 仅 nano-banana-2 支持
+              required:
+                - model
+                - prompt
+              x-apifox-orders:
+                - model
+                - prompt
+                - aspect_ratio
+                - response_format
+                - image
+                - image_size
+            example:
+              prompt: cat
+              model: nano-banana
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                x-apifox-orders: []
+          headers: {}
+          x-apifox-name: 成功
+      security: []
+      x-apifox-folder: 绘图模型/OpenAI Dall-e 格式
+      x-apifox-status: released
+      x-run-in-apifox: https://app.apifox.com/web/project/3868318/apis/api-420361512-run
+components:
+  schemas: {}
+  securitySchemes: {}
+servers: []
+security: []
+
+```
+
+Nano-banana-2(Pro)(Edits兼容)
+
+# Nano-banana-2(Pro)(Edits兼容) 
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.0.1
+info:
+  title: ''
+  description: ''
+  version: 1.0.0
+paths:
+  /v1/images/edits:
+    post:
+      summary: 'Nano-banana-2(Pro)(Edits兼容) '
+      deprecated: false
+      description: ''
+      tags:
+        - 绘图模型/OpenAI Dall-e 格式
+      parameters:
+        - name: Authorization
+          in: header
+          description: ''
+          required: false
+          example: Bearer {{YOUR_API_KEY}}
+          schema:
+            type: string
+            default: Bearer {{YOUR_API_KEY}}
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                model:
+                  example: nano-banana-2
+                  type: string
+                prompt:
+                  example: 一只猫
+                  type: string
+                image:
+                  description: 支持多图或不带参考图
+                  example:
+                    - file://E:\Downloads\1745936044575403500.png
+                    - file://E:\Downloads\微信图片_20250826114255_1785.jpg
+                  type: string
+                  format: binary
+                response_format:
+                  description: url 或 b64_json
+                  example: url
+                  type: string
+                aspect_ratio:
+                  type: string
+                  enum:
+                    - '1:1'
+                    - '2:3'
+                    - '3:2'
+                    - '3:4'
+                    - '4:3'
+                    - '4:5'
+                    - '5:4'
+                    - '9:16'
+                    - '16:9'
+                    - '21:9'
+                  x-apifox-enum:
+                    - value: '1:1'
+                      name: ''
+                      description: ''
+                    - value: '2:3'
+                      name: ''
+                      description: ''
+                    - value: '3:2'
+                      name: ''
+                      description: ''
+                    - value: '3:4'
+                      name: ''
+                      description: ''
+                    - value: '4:3'
+                      name: ''
+                      description: ''
+                    - value: '4:5'
+                      name: ''
+                      description: ''
+                    - value: '5:4'
+                      name: ''
+                      description: ''
+                    - value: '9:16'
+                      name: ''
+                      description: ''
+                    - value: '16:9'
+                      name: ''
+                      description: ''
+                    - value: '21:9'
+                      name: ''
+                      description: ''
+                  example: ''
+                image_size:
+                  type: string
+                  enum:
+                    - 1K
+                    - 2K
+                    - 4K
+                  x-apifox-enum:
+                    - value: 1K
+                      name: ''
+                      description: ''
+                    - value: 2K
+                      name: ''
+                      description: ''
+                    - value: 4K
+                      name: ''
+                      description: ''
+                  description: 仅 nano-banana-2 支持
+                  example: 4K
+              required:
+                - model
+                - prompt
+                - image
+            example:
+              model: string
+              prompt: string
+              size: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                x-apifox-orders: []
+          headers: {}
+          x-apifox-name: 成功
+      security: []
+      x-apifox-folder: 绘图模型/OpenAI Dall-e 格式
+      x-apifox-status: released
+      x-run-in-apifox: https://app.apifox.com/web/project/3868318/apis/api-420361517-run
+components:
+  schemas: {}
+  securitySchemes: {}
+servers: []
+security: []
+
+```
+
+Nano-banana-2(Pro) 官方格式 gemini-3-pro-image-preview
+# Nano-banana-2(Pro) 官方格式 gemini-3-pro-image-preview
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.0.1
+info:
+  title: ''
+  description: ''
+  version: 1.0.0
+paths:
+  /v1beta/models/gemini-3-pro-image-preview:generateContent:
+    post:
+      summary: Nano-banana-2(Pro) 官方格式 gemini-3-pro-image-preview
+      deprecated: false
+      description: >-
+        官方文档：
+
+        https://ai.google.dev/gemini-api/docs/image-generation?hl=zh-cn#aspect_ratios 
+      tags:
+        - 绘图模型/OpenAI Dall-e 格式
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          example: application/json
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: ''
+          required: false
+          example: Bearer {{YOUR_API_KEY}}
+          schema:
+            type: string
+            default: Bearer {{YOUR_API_KEY}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contents:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      parts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            inlineData:
+                              type: object
+                              properties:
+                                data:
+                                  type: string
+                                mimeType:
+                                  type: string
+                              required:
+                                - data
+                                - mimeType
+                              x-apifox-orders:
+                                - data
+                                - mimeType
+                            text:
+                              type: string
+                          required:
+                            - inlineData
+                          x-apifox-orders:
+                            - inlineData
+                            - text
+                      role:
+                        type: string
+                    x-apifox-orders:
+                      - parts
+                      - role
+                generationConfig:
+                  type: object
+                  properties:
+                    imageConfig:
+                      type: object
+                      properties:
+                        aspectRatio:
+                          type: string
+                        imageSize:
+                          type: string
+                          enum:
+                            - 1K
+                            - 2K
+                            - 4K
+                          x-apifox-enum:
+                            - value: 1K
+                              name: ''
+                              description: ''
+                            - value: 2K
+                              name: ''
+                              description: ''
+                            - value: 4K
+                              name: ''
+                              description: ''
+                      x-apifox-orders:
+                        - aspectRatio
+                        - imageSize
+                    responseModalities:
+                      type: array
+                      items:
+                        type: string
+                  x-apifox-orders:
+                    - imageConfig
+                    - responseModalities
+              required:
+                - contents
+              x-apifox-orders:
+                - contents
+                - generationConfig
+            example:
+              contents:
+                - parts:
+                    - inlineData:
+                        data: iVBORw0KGgoAAAANSUh.....
+                        mimeType: image/png
+                    - inlineData:
+                        data: iVBORw0KGgoAAAANSUh.....
+                        mimeType: image/png
+                    - text: hi
+                  role: user
+              generationConfig:
+                imageConfig:
+                  aspectRatio: '3:4'
+                  imageSize: 2K
+                responseModalities:
+                  - IMAGE
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+          headers: {}
+          x-apifox-name: 成功
+      security: []
+      x-apifox-folder: 绘图模型/OpenAI Dall-e 格式
+      x-apifox-status: released
+      x-run-in-apifox: https://app.apifox.com/web/project/3868318/apis/api-406882253-run
+components:
+  schemas: {}
+  securitySchemes: {}
+servers: []
+security: []
+
+```
+

@@ -1,0 +1,317 @@
+import { memo, useMemo, useState, useRef, useEffect } from 'react'
+import { useAppStore } from '../../store/useAppStore.ts'
+import { useShallow } from 'zustand/react/shallow'
+import { Group, Ungroup, EyeOff, Eye, Play } from 'lucide-react'
+import { useCanvasContext } from '../../contexts/CanvasContext.tsx'
+import { getXingheMediaSrc } from '../../utils/fileHelpers.ts'
+
+export const SelectionToolbar = memo(function SelectionToolbar() {
+  const {
+    selectedNodeIds,
+    nodesMap,
+    nodeGroups,
+    createGroup,
+    removeGroup,
+    renameGroup,
+    setGroupCollapsed,
+    view
+  } =
+    useAppStore(
+      useShallow((state) => ({
+        selectedNodeIds: state.selectedNodeIds,
+        nodesMap: state.nodesMap,
+        nodeGroups: state.nodeGroups,
+        createGroup: state.createGroup,
+        removeGroup: state.removeGroup,
+        renameGroup: state.renameGroup,
+        setGroupCollapsed: state.setGroupCollapsed,
+        view: state.view
+      }))
+    )
+
+  const {
+    startGeneration,
+    getConnectedTextNodes,
+    getConnectedImageForInput,
+    getConnectedAudioNodes,
+    getConnectedInputImages
+  } = useCanvasContext()
+  const setConnections = useAppStore((s) => s.setConnections)
+  const setSelectedNodeIds = useAppStore((s) => s.setSelectedNodeIds)
+  const setSelectedNodeId = useAppStore((s) => s.setSelectedNodeId)
+
+  const [editingGroupId, setEditingGroupId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const nameInputRef = useRef(null)
+
+  useEffect(() => {
+    if (editingGroupId && nameInputRef.current) {
+      nameInputRef.current.focus()
+      nameInputRef.current.select()
+    }
+  }, [editingGroupId])
+
+  const selectedIds = useMemo(() => Array.from(selectedNodeIds), [selectedNodeIds])
+  const selectedNodes = useMemo(
+    () => selectedIds.map((id) => nodesMap.get(id)).filter(Boolean),
+    [nodesMap, selectedIds]
+  )
+
+  // 不显示条件：选中少于2个节点
+  if (selectedIds.length < 2) return null
+
+  // 计算选中节点的边界框（世界坐标）
+  if (selectedNodes.length < 2) return null
+
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity
+  for (const n of selectedNodes) {
+    const nx = n.x ?? n.position?.x ?? 0
+    const ny = n.y ?? n.position?.y ?? 0
+    const nw = n.width || 300
+    if (nx < minX) minX = nx
+    if (nx + nw > maxX) maxX = nx + nw
+    if (ny < minY) minY = ny
+  }
+
+  // 工具栏在选区上方中心（世界坐标 → 屏幕坐标）
+  const centerX = (minX + maxX) / 2
+  const screenX = centerX * view.zoom + view.x
+  const screenY = minY * view.zoom + view.y - 50
+
+  // 检查选中节点是否已在同一个组
+  const existingGroup = (nodeGroups || []).find((g) => {
+    return selectedIds.every((id) => g.nodeIds.includes(id))
+  })
+  const allCollapsed = false
+
+  // 检查选中节点中是否有任何已收纳的
+  const handleToggleCollapse = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const groupId = existingGroup?.id || createGroup(selectedIds)
+    if (!groupId) return
+    setGroupCollapsed(groupId, true)
+    setSelectedNodeIds(new Set())
+    setSelectedNodeId(null)
+    // 刷新 edges hidden 状态
+    setTimeout(() => {
+      setConnections((prev) => [...prev])
+    }, 50)
+  }
+
+  const handleCreateGroup = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    // 如果已有组包含部分选中节点，先移除
+    createGroup(selectedIds)
+  }
+
+  const handleRemoveGroup = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (existingGroup) {
+      removeGroup(existingGroup.id)
+    }
+  }
+
+  const handleStartRename = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (existingGroup) {
+      setEditingGroupId(existingGroup.id)
+      setEditName(existingGroup.name)
+    }
+  }
+
+  const handleSaveRename = () => {
+    if (editingGroupId && editName.trim()) {
+      renameGroup(editingGroupId, editName.trim())
+    }
+    setEditingGroupId(null)
+  }
+
+  // ========== 批量运行 ==========
+  const genNodes = selectedNodes.filter((n) => n.type === 'gen-image' || n.type === 'gen-video')
+  const hasGenNodes = genNodes.length > 0
+
+  const handleRunAll = async (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+
+    for (const node of genNodes) {
+      try {
+        const basePrompt =
+          node.type === 'gen-image' ? node.settings?.prompt || '' : node.settings?.videoPrompt || ''
+
+        const appliedTpls =
+          node.type === 'gen-image'
+            ? node.settings?.appliedTemplates || []
+            : node.settings?.appliedVideoTemplates || []
+        const templateContents = appliedTpls.map((t) => t.content).filter(Boolean)
+
+        const connectedTexts = getConnectedTextNodes ? getConnectedTextNodes(node.id) : []
+
+        const allParts = [...templateContents, ...connectedTexts]
+        if (basePrompt) allParts.push(basePrompt)
+        let rawPrompt = allParts.join(' ')
+
+        const finalPrompt = rawPrompt
+          .replace(/@图片(\d+)\s?/g, '【图$1】')
+          .replace(/@素材(\d+)\s?/g, '【素$1】')
+          .replace(/@音频(\d+)\s?/g, '【音$1】')
+          .replace(/@视频(\d+)\s?/g, '【视$1】')
+
+        // 收集连接的图片
+        const connImgs = getConnectedInputImages ? getConnectedInputImages(node.id) : []
+        const manualImgs = (node.settings?.manualImages || []).map((p) => getXingheMediaSrc(p))
+        let finalConnectedImages = [...connImgs, ...manualImgs]
+        let payloadSettings: Record<string, any> = { ...node.settings, batchSize: 1 }
+
+        // Veo 首尾帧模式
+        if (node.type === 'gen-video' && node.settings?.veoFramesMode) {
+          const sf =
+            node.settings?.manualStartFrame ||
+            (getConnectedImageForInput ? getConnectedImageForInput(node.id, 'veo_start') : null)
+          const ef =
+            node.settings?.manualEndFrame ||
+            (getConnectedImageForInput ? getConnectedImageForInput(node.id, 'veo_end') : null)
+          finalConnectedImages = []
+          const roles = []
+          if (sf) {
+            finalConnectedImages.push(sf)
+            roles.push('first_frame')
+          }
+          if (ef) {
+            finalConnectedImages.push(ef)
+            roles.push('last_frame')
+          }
+          payloadSettings.imageRoles = roles.length > 0 ? roles : undefined
+          payloadSettings.generationMode = 'image-first-last-frame'
+        }
+
+        if (node.type === 'gen-video') {
+          // 合并本地视频 + URL 文本
+          const localVids = node.settings?.manualVideos || []
+          const textUrls = node.settings?.sourceVideosText
+            ? node.settings.sourceVideosText.split('\n').filter((u) => u.trim())
+            : []
+          const allVideos = [...localVids, ...textUrls]
+          payloadSettings.sourceVideos = allVideos.length > 0 ? allVideos : undefined
+          const genAudios = getConnectedAudioNodes ? getConnectedAudioNodes(node.id) : []
+          const manualAuds = node.settings?.manualAudios || []
+          const allAudios = [...genAudios, ...manualAuds]
+          payloadSettings.sourceAudios = allAudios.length > 0 ? allAudios : undefined
+        }
+
+        const batchSize = node.settings?.batchSize || 1
+        for (let i = 0; i < batchSize; i++) {
+          await startGeneration(
+            finalPrompt,
+            node.type === 'gen-image' ? 'image' : 'video',
+            finalConnectedImages,
+            node.id,
+            payloadSettings
+          )
+          if (i < batchSize - 1) await new Promise((r) => setTimeout(r, 1000))
+        }
+      } catch (err) {
+        console.error(`[批量运行] 节点 ${node.id} 生成失败:`, err)
+      }
+    }
+  }
+
+  return (
+    <div
+      className="fixed z-[9999] pointer-events-auto"
+      style={{
+        left: screenX,
+        top: Math.max(8, screenY),
+        transform: 'translateX(-50%)'
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-[var(--bg-panel)]/95 backdrop-blur-md border border-[var(--border-color)] shadow-xl">
+        {/* 收纳输出按钮 */}
+        <button
+          onClick={handleToggleCollapse}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+            false
+              ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+          }`}
+          title={allCollapsed ? '展开输出' : '收纳输出'}
+        >
+          {allCollapsed ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>{allCollapsed ? '展开' : '收纳'}</span>
+        </button>
+
+        <div className="w-px h-4 bg-[var(--border-color)]" />
+
+        {/* 编组 / 解散组 */}
+        {existingGroup ? (
+          <div className="flex items-center gap-1">
+            {editingGroupId === existingGroup.id ? (
+              <input
+                ref={nameInputRef}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleSaveRename}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter') handleSaveRename()
+                  if (e.key === 'Escape') setEditingGroupId(null)
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="nodrag text-[11px] font-mono bg-[var(--bg-base)] border border-[var(--primary-color)] rounded px-1.5 py-0.5 outline-none text-[var(--text-primary)] w-20"
+              />
+            ) : (
+              <span
+                className="text-[11px] font-medium px-1.5 py-0.5 rounded cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                style={{ color: existingGroup.color }}
+                onDoubleClick={handleStartRename}
+                title="双击编辑组名"
+              >
+                {existingGroup.name}
+              </span>
+            )}
+            <button
+              onClick={handleRemoveGroup}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-red-400 hover:bg-red-500/15 transition-all"
+              title="解散组"
+            >
+              <Ungroup size={13} />
+              <span>解散</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleCreateGroup}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all"
+            title="编组"
+          >
+            <Group size={13} />
+            <span>编组</span>
+          </button>
+        )}
+
+        {/* 分隔线 + 批量运行按钮 */}
+        {hasGenNodes && (
+          <>
+            <div className="w-px h-4 bg-[var(--border-color)]" />
+            <button
+              onClick={handleRunAll}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-green-400 hover:bg-green-500/15 hover:text-green-300 transition-all"
+              title={`运行全部 ${genNodes.length} 个生成节点`}
+            >
+              <Play size={13} />
+              <span>全部运行 ({genNodes.length})</span>
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+})

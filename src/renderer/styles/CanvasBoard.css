@@ -1,14 +1,14 @@
 /* ȫȾŻ */
 * {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: auto;
 }
 
 /* ȾŻ */
 #canvas-bg {
-  transform: translateZ(0);
-  backface-visibility: hidden;
+  transform: none;
+  backface-visibility: visible;
   perspective: 1000px;
 }
 
@@ -20,10 +20,42 @@
 
 /* 节点优化 */
 .node-wrapper {
-  transform: translateZ(0);
-  backface-visibility: hidden;
+  transform: none;
+  backface-visibility: visible;
   contain: style;
-  content-visibility: auto;
+  content-visibility: visible;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
+    color-mix(in srgb, var(--bg-panel) 42%, transparent) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: auto;
+}
+
+.node-wrapper [data-onboarding='node-example'],
+.node-wrapper .node-glass-surface {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
+    color-mix(in srgb, var(--bg-card) 28%, transparent) !important;
+  backdrop-filter: blur(14px) saturate(125%);
+  -webkit-backdrop-filter: blur(14px) saturate(125%);
+}
+
+.node-wrapper * {
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: auto;
+  text-shadow: none;
+}
+
+.node-wrapper svg,
+.node-wrapper svg * {
+  transform: none;
+  filter: none;
+  will-change: auto;
 }
 
 /* 拖动中：禁用所有过渡动画和阴影计算，最大化帧率 */
@@ -35,27 +67,26 @@
 
 /* 非拖动状态：正常 will-change 提示 */
 .react-flow__node:not(.dragging) .node-wrapper {
-  will-change: transform, left, top;
+  will-change: auto;
 }
 
 /* ڵͼƬȾŻ - ʹøȾ */
 .node-wrapper img,
 .node-wrapper video {
   image-rendering: auto;
-  image-rendering: -webkit-optimize-contrast;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+  transform: none;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
   pointer-events: none;
 }
 
 /* Ż */
 svg {
-  shape-rendering: geometricPrecision;
-  text-rendering: optimizeLegibility;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  will-change: transform;
+  shape-rendering: auto;
+  text-rendering: auto;
+  transform: none;
+  backface-visibility: visible;
+  will-change: auto;
 }
 
 .connection-group {
@@ -97,6 +128,253 @@ svg {
 .node-wrapper.media-offscreen img,
 .node-wrapper.media-offscreen video {
   display: none !important;
+}
+
+.canvas-heavy-load .node-wrapper,
+.canvas-interacting .node-wrapper {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  transition: none !important;
+}
+
+.canvas-heavy-load .node-wrapper [data-onboarding='node-example'],
+.canvas-heavy-load .node-wrapper .node-glass-surface,
+.canvas-interacting .node-wrapper [data-onboarding='node-example'],
+.canvas-interacting .node-wrapper .node-glass-surface {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.canvas-heavy-load .node-wrapper img,
+.canvas-heavy-load .node-wrapper video {
+  content-visibility: auto;
+  contain-intrinsic-size: 160px 100px;
+}
+
+.canvas-interacting .node-wrapper img,
+.canvas-interacting .node-wrapper video {
+  visibility: hidden !important;
+}
+
+/* ═══════════════════════════════════════════
+   节点类型色条系统 —— 顶部 2px 渐变色条
+   ═══════════════════════════════════════════ */
+[class*='node-type-'] .node-wrapper {
+  position: relative;
+}
+[class*='node-type-'] .node-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  opacity: 0.7;
+  z-index: 1;
+  pointer-events: none;
+}
+.node-type-image .node-wrapper::before {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+.node-type-video .node-wrapper::before {
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+}
+.node-type-agent .node-wrapper::before {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+.node-type-director .node-wrapper::before {
+  background: linear-gradient(90deg, #ec4899, #f472b6);
+}
+/* ═══════════════════════════════════════════
+   生成中 — 底部进度细线
+   ═══════════════════════════════════════════ */
+.node-generating .node-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 0 0 14px 14px;
+  background: var(--primary-color);
+  width: var(--gen-progress, 0%);
+  transition: width 0.5s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.node-resize-corner-handle,
+.node-resize-corner-handle::before,
+.node-resize-corner-handle::after,
+.react-flow__resize-control.handle,
+.react-flow__resize-control.handle::before,
+.react-flow__resize-control.handle::after {
+  width: 16px !important;
+  height: 16px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+.node-resize-line-hitbox,
+.node-resize-line-hitbox::before,
+.node-resize-line-hitbox::after,
+.react-flow__resize-control.line,
+.react-flow__resize-control.line::before,
+.react-flow__resize-control.line::after {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+/* ═══════════════════════════════════════════
+   节点入场 & 完成动画
+   ═══════════════════════════════════════════ */
+@keyframes node-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes gen-complete {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.005);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   底部悬浮 Dock
+   ═══════════════════════════════════════════ */
+.bottom-dock {
+  background: var(--bg-panel);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 6px 12px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dock-btn {
+  transition: all 0.15s ease;
+}
+.dock-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.08);
+}
+.dock-btn.active {
+  background: rgba(var(--primary-rgb, 79, 110, 247), 0.15);
+  color: var(--primary-color);
+}
+
+/* ═══════════════════════════════════════════
+   面板精修：历史面板、资产库等
+   ═══════════════════════════════════════════ */
+.history-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.asset-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border-bottom: 1px solid var(--border-default);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+/* 设置面板导航 */
+.settings-nav-item {
+  margin: 2px 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  transition: all 0.15s ease;
+  color: var(--text-secondary) !important;
+  opacity: 1;
+  border-left: 2px solid transparent;
+}
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary) !important;
+}
+.settings-nav-item.active {
+  background: var(--bg-hover);
+  color: var(--text-secondary) !important;
+  font-weight: 600;
+  border-left-color: var(--border-strong);
+}
+
+/* 设置卡片 */
+.settings-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
+  transition: border-color 0.15s ease;
+}
+.settings-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 项目卡片 */
+.project-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.project-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal 增强 */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+.modal-container {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.modal-overlay.modal-overlay-light {
+  background: rgba(0, 0, 0, 0.48) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.modal-container.modal-container-light {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -340,4 +618,254 @@ svg {
 .markdown-body table tr:nth-child(even) {
   background-color: var(--bg-base);
   transition: background-color 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════
+   ReactFlow 背景透明化 — 让 WebGL 粒子穿透
+   ═══════════════════════════════════════════ */
+.react-flow {
+  background: transparent !important;
+}
+
+.react-flow__viewport {
+  background: transparent !important;
+}
+
+.react-flow__background {
+  background: transparent !important;
+}
+
+.node-index-label {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 20px);
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 82%, rgba(0, 0, 0, 0.16));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  pointer-events: auto;
+}
+
+.node-index-label__number {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.node-index-label input {
+  width: 50px;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.node-index-label.has-description input,
+.node-index-label:focus-within input,
+.node-index-label:hover input {
+  width: min(112px, calc(100% - 34px));
+}
+
+.node-index-label input::placeholder {
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.node-wrapper--collapsed {
+  min-height: 56px;
+}
+
+.node-wrapper--collapsed .node-index-label {
+  top: 6px;
+}
+
+.node-collapsed-shell {
+  display: flex;
+  height: 100%;
+  min-height: 56px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 12px 10px 92px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--bg-card) 58%, transparent);
+  pointer-events: none;
+}
+
+.node-collapsed-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: calc(16px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-collapsed-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: calc(10px * var(--text-scale, 1));
+  line-height: calc(14px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-group-box {
+  position: absolute;
+  z-index: 1;
+  border: 2px dashed;
+  border-radius: 12px;
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.canvas-group-box:active {
+  cursor: grabbing;
+}
+
+.canvas-group-folder {
+  position: absolute;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  width: 176px;
+  min-height: 58px;
+  padding: 8px 9px;
+  border: 1px solid;
+  border-radius: 10px;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.canvas-group-folder:active {
+  cursor: grabbing;
+}
+
+.canvas-group-folder__icon {
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.canvas-group-folder__body {
+  min-width: 0;
+}
+
+.canvas-group-folder__name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: calc(16px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-group-folder__name-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  outline: none;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: calc(16px * var(--text-scale, 1));
+  padding: 1px 5px;
+}
+
+.canvas-group-folder__meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: calc(10px * var(--text-scale, 1));
+  line-height: calc(14px * var(--text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-group-folder__expand {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.canvas-group-folder__expand:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+}
+
+.canvas-node-search {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 190px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 86%, rgba(0, 0, 0, 0.18));
+  color: var(--text-secondary);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  pointer-events: auto;
+}
+
+.canvas-node-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.canvas-node-search input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.canvas-node-search.is-found {
+  border-color: color-mix(in srgb, var(--primary-color) 62%, rgba(255, 255, 255, 0.2));
+}
+
+.canvas-node-search.is-not-found {
+  border-color: rgba(248, 113, 113, 0.72);
 }
