@@ -764,6 +764,7 @@ export function SettingsModal({
           {activeSettingsTab === 'services' && (
             <div className="p-6 animate-in fade-in space-y-6">
               <OssServiceSettingsSection />
+              <ArkAssetServiceSettingsSection />
               <VodServiceSettingsSection />
             </div>
           )}
@@ -1015,6 +1016,174 @@ function OssServiceSettingsSection() {
         )}
         <p className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
           用于把本地参考图、参考视频临时上传成公网 URL，再提交给视频模型。密钥只保存在本机安全存储中，不会回显明文。
+        </p>
+      </div>
+    </section>
+  )
+}
+
+function ArkAssetServiceSettingsSection() {
+  const [form, setForm] = useState({
+    accessKeyId: '',
+    accessKeySecret: ''
+  })
+  const [status, setStatus] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
+
+  const loadConfig = useCallback(async () => {
+    setLoading(true)
+    setMessage('')
+    try {
+      const result = await window.api?.assetAPI?.getConfig?.()
+      setStatus(result)
+      if (result?.success === false) throw new Error(result.error || '读取方舟配置失败')
+    } catch (error) {
+      setMessage(`读取失败：${error?.message || error}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadConfig()
+  }, [loadConfig])
+
+  const updateForm = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setMessage('')
+  }
+
+  const saveConfig = async () => {
+    setSaving(true)
+    setMessage('')
+    try {
+      const result = await window.api?.assetAPI?.saveConfig?.(form)
+      setStatus(result)
+      if (!result?.success) throw new Error(result?.error || '保存方舟配置失败')
+      setForm({ accessKeyId: '', accessKeySecret: '' })
+      setMessage('方舟素材库 AK/SK 已保存。本机素材入库会使用这里的配置。')
+    } catch (error) {
+      setMessage(`保存失败：${error?.message || error}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const clearConfig = async () => {
+    if (!confirm('确定清除本机保存的方舟 AK/SK 吗？')) return
+    setSaving(true)
+    setMessage('')
+    try {
+      const result = await window.api?.assetAPI?.clearConfig?.()
+      setStatus(result)
+      setForm({ accessKeyId: '', accessKeySecret: '' })
+      setMessage('已清除本机保存的方舟素材库配置')
+    } catch (error) {
+      setMessage(`清除失败：${error?.message || error}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const sourceLabel = status?.source === 'settings' ? '本机安全存储' : '未配置'
+
+  return (
+    <section>
+      <h3 className="text-sm font-bold text-[var(--text-secondary)] mb-4 pb-2 border-b border-[var(--border-color)]">
+        火山方舟素材库
+      </h3>
+      <div className="max-w-2xl rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4">
+        <div className="grid gap-3 text-xs sm:grid-cols-3">
+          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-panel)] p-3">
+            <div className="text-[var(--text-muted)]">接入状态</div>
+            <div className="mt-1 text-sm text-[var(--text-primary)]">
+              {status?.configured ? '已配置' : '未配置'}
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-panel)] p-3">
+            <div className="text-[var(--text-muted)]">凭证来源</div>
+            <div className="mt-1 text-sm text-[var(--text-primary)]">{sourceLabel}</div>
+          </div>
+          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-panel)] p-3">
+            <div className="text-[var(--text-muted)]">AccessKey</div>
+            <div className="mt-1 text-sm text-[var(--text-primary)]">
+              {status?.accessKeyIdMasked || '未保存'}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">
+              AccessKey ID
+            </span>
+            <input
+              value={form.accessKeyId}
+              onChange={(event) => updateForm('accessKeyId', event.target.value)}
+              placeholder={status?.accessKeyIdMasked || 'AKLT...'}
+              className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary-color)]"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">
+              Secret AccessKey
+            </span>
+            <div className="flex gap-2">
+              <input
+                type={showSecret ? 'text' : 'password'}
+                value={form.accessKeySecret}
+                onChange={(event) => updateForm('accessKeySecret', event.target.value)}
+                placeholder={status?.storedConfigured ? '已保存，重新填写可覆盖' : 'SK...'}
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border-color)] bg-[var(--bg-panel)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary-color)]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecret((prev) => !prev)}
+                className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] px-3 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={saveConfig}
+            disabled={saving || loading || !status?.safeStorageAvailable}
+            className="rounded-lg bg-[var(--primary-color)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saving ? '保存中' : '保存方舟配置'}
+          </button>
+          <button
+            type="button"
+            onClick={loadConfig}
+            disabled={loading}
+            className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:bg-[var(--bg-input)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            刷新状态
+          </button>
+          <button
+            type="button"
+            onClick={clearConfig}
+            disabled={saving || !status?.storedConfigured}
+            className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-200 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            清除本机配置
+          </button>
+        </div>
+
+        {message && (
+          <div className="mt-4 rounded-lg border border-[var(--border-color)] bg-[var(--bg-panel)] p-3 text-xs leading-5 text-[var(--text-secondary)]">
+            {message}
+          </div>
+        )}
+        <p className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
+          用于把公网素材注册到 Seedance Asset API，供 asset:// 素材引用使用。密钥只保存在本机安全存储中，不会回显明文。
         </p>
       </div>
     </section>
