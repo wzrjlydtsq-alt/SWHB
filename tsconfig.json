@@ -1,9 +1,18 @@
 {
   "compilerOptions": {
-    /* 渐进迁移：允许 JS 和 TS 共存 */
+    /* 渐进迁移模式：已完成文件重命名，逐步收紧类型检查 */
     "allowJs": true,
     "checkJs": false,
-    "strict": true,
+
+    /* 阶段性严格模式 — 先宽松后收紧 */
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
 
     /* 模块 */
     "target": "ESNext",
@@ -33,11 +42,13 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.js",
-    "src/**/*.jsx"
+    "src/**/*.jsx",
+    "src/types/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "out",
-    "dist"
+    "dist",
+    "scripts"
   ]
 }

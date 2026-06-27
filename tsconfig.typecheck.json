@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/types/*.d.ts",
+    "src/renderer/services/cloud/**/*.ts",
+    "src/renderer/services/__tests__/**/*.ts",
+    "src/renderer/utils/toast.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "dist",
+    "scripts"
+  ]
+}

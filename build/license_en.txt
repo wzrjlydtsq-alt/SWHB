@@ -1,0 +1,26 @@
+Xinghe Zhihui End User License Agreement and Privacy Notice
+
+Please read this agreement carefully before installing or using Xinghe Zhihui. By clicking "I Agree" or continuing the installation, you acknowledge that you have read, understood, and agreed to this agreement.
+
+1. Software License
+Xinghe Zhihui is provided and maintained by Guo Ruifan. We grant you a non-exclusive, non-transferable, revocable license to install and use this software within the authorized and lawful scope.
+
+2. Acceptable Use
+You may not reverse engineer, crack, bypass authorization, maliciously modify, distribute harmful content through, or use this software for any illegal purpose or infringement of others' rights. You are responsible for ensuring that any content you input, upload, generate, or save has a lawful source and proper usage rights.
+
+3. Data and Privacy
+To provide project management, asset caching, generation tasks, update checks, error diagnostics, and related features, this software may store project files, settings, cache data, logs, and diagnostic information locally. When you use cloud collaboration, account login, asset upload, or third-party model services, relevant data may be sent to the corresponding server or third-party service based on your actions. We will take reasonable measures to protect data security.
+
+4. Third-Party Services
+This software may integrate third-party APIs, models, cloud storage, login, or collaboration services. Availability, pricing, content policies, and data processing rules of third-party services are governed by the corresponding service providers. Please review and accept their terms before using related features.
+
+5. Updates and Maintenance
+This software may check for, download, and install updates to fix issues, improve stability, or provide new features. During updates, the software may need to close running processes, release file locks, refresh caches, or re-register system protocols.
+
+6. Disclaimer
+To the maximum extent permitted by law, this software is provided "as is". We are not liable beyond the scope required by law for losses caused by network interruption, third-party service changes, user error, abnormal system environments, insufficient data backup, or force majeure.
+
+7. Changes
+We may update this agreement due to product changes, legal requirements, or service changes. Updated terms may be provided with newer installers or in-app notices.
+
+If you do not agree to this agreement, please stop the installation and do not use this software.

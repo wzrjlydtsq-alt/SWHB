@@ -3,14 +3,38 @@ productName: 星河智绘
 directories:
   buildResources: build
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
+  - out/**
+  - resources/**
+  - package.json
+  - node_modules/**
+  - '!**/.vscode/**'
+  - '!src/**'
+  - '!server/**'
+  - '!docs/**'
+  - '!training_corpus/**'
+  - '!db_backups/**'
+  - '!scripts/seed_*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!*.db'
+  - '!*.db-shm'
+  - '!*.db-wal'
+  - '!*.png'
+  - '!*.jpg'
+  - '!*.jpeg'
+  - '!*.webp'
+  - '!*.md'
+  - '!*.txt'
+  - '!*.log'
+  - '!dist/**'
+  - '!dist-web/**'
+  - '!coverage/**'
+  - '!*.tsbuildinfo'
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
+  - node_modules/ffmpeg-static/**
 win:
   executableName: XingheZhihui
   forceCodeSigning: false
@@ -20,7 +44,11 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
   oneClick: false
-  allowToChangeInstallationDirectory: true
+  perMachine: false
+  selectPerMachineByDefault: false
+  allowElevation: false
+  license: build/license_zh_CN_with_rights.rtf
+  allowToChangeInstallationDirectory: false
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
@@ -39,6 +67,7 @@ linux:
   maintainer: electronjs.org
   category: Utility
 publish:
-  provider: github
-  owner: wzrjlydtsq-alt
-  repo: SWHB
+  provider: generic
+  url: https://image.lingjingxinghe.cn/app-updates/
+releaseInfo:
+  releaseNotesFile: release-notes.md

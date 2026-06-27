@@ -1,0 +1,6 @@
+{
+  "id": "golden-retriever",
+  "displayName": "Golden Retriever",
+  "description": "A friendly golden retriever digital pet.",
+  "spritesheetPath": "spritesheet.webp"
+}

@@ -1,0 +1,30 @@
+Xinghe OSS config fill template
+
+Open:
+Settings -> Services -> Aliyun OSS upload
+
+Fill these fields:
+
+AccessKey ID:
+<paste your Aliyun RAM AccessKey ID here, usually starts with LTAI>
+
+AccessKey Secret:
+<paste the matching Aliyun RAM AccessKey Secret here>
+
+Region:
+oss-cn-chengdu
+
+Bucket:
+ljxhimage2
+
+Endpoint:
+https://oss-cn-chengdu.aliyuncs.com
+
+Public URL:
+https://image.lingjingxinghe.cn
+
+Notes:
+- AccessKey ID and AccessKey Secret must be copied from Aliyun RAM / AccessKey management.
+- The app will store them with local secure storage after you click Save.
+- I cannot print or export the real Secret in plain text.
+- If upload still fails after saving, check whether this RAM user has OSS PutObject permission for bucket ljxhimage2.

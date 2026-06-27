@@ -3,30 +3,29 @@ import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
 import { globalTaskQueue } from './engine/TaskQueue.js'
-import db from './database.js'
+import db, { getCacheStats } from './database.js'
 
-// IPC 调用计数器
 let ipcCallCount = 0
+let cachedStats = null
+let cachedStatsAt = 0
+let cachedHeavyStats = null
+let cachedHeavyStatsAt = 0
+const STATS_CACHE_TTL_MS = 500
+const HEAVY_STATS_TTL_MS = 30 * 1000
+const SLOW_STATS_WARN_MS = 150
+
 export function incrementIpcCount() {
   ipcCallCount++
 }
 
-// 应用启动时间
 const appStartTime = Date.now()
 
-/**
- * 采集系统监控数据（主进程调用）
- */
-export function collectStats() {
-  const memUsage = process.memoryUsage()
-  const cpuUsage = process.cpuUsage()
-
-  // 数据库统计
+function collectHeavyStats() {
   let dbStats = null
   try {
     if (!db) throw new Error('db not initialized')
 
-    const tables = ['projects', 'nodes', 'connections', 'history', 'assets', 'settings']
+    const tables = ['projects', 'nodes', 'connections', 'history', 'assets', 'settings', 'cache_files']
     const tableCounts = {}
     for (const table of tables) {
       try {
@@ -37,7 +36,6 @@ export function collectStats() {
       }
     }
 
-    // DB 文件大小
     const dbPath = !app.isPackaged
       ? path.join(process.cwd(), 'canvas_data.db')
       : path.join(app.getPath('userData'), 'canvas_data.db')
@@ -56,54 +54,79 @@ export function collectStats() {
     dbStats = { error: e.message }
   }
 
-  // 任务引擎状态
+  let cacheStats = { images: { count: 0, size: 0 }, videos: { count: 0, size: 0 } }
+  try {
+    cacheStats = getCacheStats()
+  } catch {
+    // ignore
+  }
+
+  return { database: dbStats, cache: cacheStats, timestamp: Date.now() }
+}
+
+function getHeavyStatsCached() {
+  const now = Date.now()
+  if (!cachedHeavyStats || now - cachedHeavyStatsAt > HEAVY_STATS_TTL_MS) {
+    const startedAt = Date.now()
+    cachedHeavyStats = collectHeavyStats()
+    cachedHeavyStatsAt = Date.now()
+    const durationMs = cachedHeavyStatsAt - startedAt
+    if (durationMs > SLOW_STATS_WARN_MS) {
+      console.warn(`[systemMonitor] heavy stats took ${durationMs}ms`)
+    }
+  }
+
+  return {
+    ...cachedHeavyStats,
+    heavyStatsAgeMs: now - cachedHeavyStatsAt
+  }
+}
+
+export function collectStatsCached() {
+  const now = Date.now()
+  if (cachedStats && now - cachedStatsAt < STATS_CACHE_TTL_MS) {
+    return {
+      ...cachedStats,
+      cached: true,
+      cacheAgeMs: now - cachedStatsAt
+    }
+  }
+
+  const startedAt = Date.now()
+  const stats = collectStats()
+  const durationMs = Date.now() - startedAt
+  cachedStats = {
+    ...stats,
+    cached: false,
+    collectionDurationMs: durationMs
+  }
+  cachedStatsAt = Date.now()
+
+  if (durationMs > SLOW_STATS_WARN_MS) {
+    console.warn(`[systemMonitor] collectStats took ${durationMs}ms`)
+  }
+
+  return cachedStats
+}
+
+export function collectStats() {
+  const memUsage = process.memoryUsage()
+  const cpuUsage = process.cpuUsage()
+  const heavyStats = getHeavyStatsCached()
+
   let engineStats = { active: 0, waiting: 0, completed: 0, failed: 0 }
   try {
     const status = globalTaskQueue.getStatus()
     engineStats = {
       active: status.active?.length || 0,
       waiting: status.waiting?.length || 0,
-      completed: status.completed?.length || 0,
-      failed: status.failed?.length || 0
+      completed: status.completed?.length || status.completed || 0,
+      failed: status.failed?.length || status.failed || 0
     }
   } catch {
     // ignore
   }
 
-  // 磁盘缓存统计
-  let cacheStats = { images: { count: 0, size: 0 }, videos: { count: 0, size: 0 } }
-  try {
-    const cacheBase = path.join(app.getPath('userData'), 'LocalCache')
-    const scanDir = (dirPath) => {
-      let count = 0
-      let size = 0
-      try {
-        if (fs.existsSync(dirPath)) {
-          const files = fs.readdirSync(dirPath)
-          for (const file of files) {
-            try {
-              const stat = fs.statSync(path.join(dirPath, file))
-              if (stat.isFile()) {
-                count++
-                size += stat.size
-              }
-            } catch {
-              // skip inaccessible files
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-      return { count, size }
-    }
-    cacheStats.images = scanDir(path.join(cacheBase, 'images'))
-    cacheStats.videos = scanDir(path.join(cacheBase, 'videos'))
-  } catch {
-    // ignore
-  }
-
-  // CPU 核心数
   const cpus = os.cpus()
 
   return {
@@ -130,13 +153,14 @@ export function collectStats() {
       cpuUser: cpuUsage.user,
       cpuSystem: cpuUsage.system
     },
-    database: dbStats,
+    database: heavyStats.database,
     engine: engineStats,
     ipc: {
       registeredChannels: 38,
       totalCalls: ipcCallCount
     },
-    cache: cacheStats,
+    cache: heavyStats.cache,
+    heavyStatsAgeMs: heavyStats.heavyStatsAgeMs,
     timestamp: Date.now()
   }
 }
