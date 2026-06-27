@@ -116,9 +116,6 @@ const ALLOWED_CHANNELS = [
   'oss:save-config',
   'oss:clear-config',
   'oss:upload-file',
-  'asset:get-config',
-  'asset:save-config',
-  'asset:clear-config',
   'asset:create-group',
   'asset:get-default-group',
   'asset:get-group',
@@ -333,9 +330,6 @@ const api = {
     uploadFile: (localPath) => safeInvoke('oss:upload-file', { localPath })
   },
   assetAPI: {
-    getConfig: () => safeInvoke('asset:get-config'),
-    saveConfig: (payload) => safeInvoke('asset:save-config', payload),
-    clearConfig: () => safeInvoke('asset:clear-config'),
     createGroup: (name, description) => safeInvoke('asset:create-group', { name, description }),
     getDefaultGroup: () => safeInvoke('asset:get-default-group'),
     getGroup: (groupId) => safeInvoke('asset:get-group', { groupId }),

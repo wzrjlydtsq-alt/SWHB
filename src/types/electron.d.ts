@@ -786,26 +786,6 @@ export interface SeedanceAsset {
 }
 
 export interface AssetAPI {
-  getConfig: () => Promise<{
-    success: boolean
-    configured?: boolean
-    storedConfigured?: boolean
-    safeStorageAvailable?: boolean
-    source?: 'settings' | 'none'
-    accessKeyIdMasked?: string
-    updatedAt?: string | null
-    error?: string
-  }>
-  saveConfig: (payload: {
-    accessKeyId?: string
-    accessKeySecret?: string
-  }) => Promise<{
-    success: boolean
-    configured?: boolean
-    storedConfigured?: boolean
-    error?: string
-  }>
-  clearConfig: () => Promise<{ success: boolean; configured?: boolean; error?: string }>
   createGroup: (name: string, description?: string) => Promise<{ id: string }>
   getDefaultGroup: () => Promise<{ id: string }>
   getGroup: (groupId: string) => Promise<Record<string, unknown>>

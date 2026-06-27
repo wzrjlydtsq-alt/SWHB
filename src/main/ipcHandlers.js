@@ -43,9 +43,7 @@ import {
   getAsset,
   pollAssetUntilReady,
   listAssets,
-  updateAsset,
-  setRuntimeArkConfig,
-  getRuntimeArkStatus
+  updateAsset
 } from './engine/arkAssetApi.js'
 import { collectStatsCached, incrementIpcCount } from './systemMonitor.js'
 import mainDb, {
@@ -396,12 +394,11 @@ function loadProjectWithLegacySqliteFallback(id, options = {}) {
 }
 
 const OSS_CONFIG_SETTING_KEY = 'xinghe_oss_runtime_config_v1'
-const ARK_ASSET_CONFIG_SETTING_KEY = 'xinghe_ark_asset_runtime_config_v1'
 
 function encryptSecretText(value) {
   if (!value) return ''
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('系统安全存储不可用，无法保存服务密钥')
+    throw new Error('系统安全存储不可用，无法保存 OSS 密钥')
   }
   return safeStorage.encryptString(String(value)).toString('base64')
 }
@@ -409,7 +406,7 @@ function encryptSecretText(value) {
 function decryptSecretText(value) {
   if (!value) return ''
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('系统安全存储不可用，无法读取服务密钥')
+    throw new Error('系统安全存储不可用，无法读取 OSS 密钥')
   }
   return safeStorage.decryptString(Buffer.from(String(value), 'base64'))
 }
@@ -506,84 +503,6 @@ function clearOssConfig() {
   deleteSetting(OSS_CONFIG_SETTING_KEY)
   setRuntimeOssConfig({})
   return getOssConfigStatus()
-}
-
-function readStoredArkAssetConfig({ includeSecrets = false } = {}) {
-  const raw = getSetting(ARK_ASSET_CONFIG_SETTING_KEY)
-  if (!raw) return null
-  const data = JSON.parse(raw)
-  const config = {
-    updatedAt: data.updatedAt || null,
-    hasStoredAccessKeyId: Boolean(data.accessKeyIdEncrypted),
-    hasStoredAccessKeySecret: Boolean(data.accessKeySecretEncrypted)
-  }
-  if (includeSecrets) {
-    config.accessKeyId = decryptSecretText(data.accessKeyIdEncrypted)
-    config.accessKeySecret = decryptSecretText(data.accessKeySecretEncrypted)
-  }
-  return config
-}
-
-function applyStoredArkAssetConfig() {
-  try {
-    const stored = readStoredArkAssetConfig({ includeSecrets: true })
-    if (stored?.accessKeyId && stored?.accessKeySecret) {
-      setRuntimeArkConfig(stored)
-    } else {
-      setRuntimeArkConfig({})
-    }
-    return stored
-  } catch (error) {
-    console.warn('[asset:config] Failed to apply stored config:', error.message || error)
-    return null
-  }
-}
-
-function getArkAssetConfigStatus() {
-  const stored = readStoredArkAssetConfig()
-  const runtime = getRuntimeArkStatus()
-  return {
-    success: true,
-    ...runtime,
-    storedConfigured: Boolean(stored?.hasStoredAccessKeyId && stored?.hasStoredAccessKeySecret),
-    safeStorageAvailable: safeStorage.isEncryptionAvailable(),
-    source: stored?.hasStoredAccessKeyId && stored?.hasStoredAccessKeySecret ? 'settings' : 'none',
-    updatedAt: stored?.updatedAt || null
-  }
-}
-
-function saveArkAssetConfig(payload = {}) {
-  if (!safeStorage.isEncryptionAvailable()) {
-    return { success: false, error: '系统安全存储不可用，无法保存方舟 AK/SK' }
-  }
-
-  const existingRaw = getSetting(ARK_ASSET_CONFIG_SETTING_KEY)
-  const existing = existingRaw ? JSON.parse(existingRaw) : {}
-  const accessKeyId = String(payload.accessKeyId || '').trim()
-  const accessKeySecret = String(payload.accessKeySecret || '').trim()
-  const next = {
-    accessKeyIdEncrypted: accessKeyId
-      ? encryptSecretText(accessKeyId)
-      : existing.accessKeyIdEncrypted || '',
-    accessKeySecretEncrypted: accessKeySecret
-      ? encryptSecretText(accessKeySecret)
-      : existing.accessKeySecretEncrypted || '',
-    updatedAt: new Date().toISOString()
-  }
-
-  if (!next.accessKeyIdEncrypted || !next.accessKeySecretEncrypted) {
-    return { success: false, error: '请填写方舟 AccessKey ID 和 Secret AccessKey' }
-  }
-
-  setSetting(ARK_ASSET_CONFIG_SETTING_KEY, JSON.stringify(next))
-  applyStoredArkAssetConfig()
-  return getArkAssetConfigStatus()
-}
-
-function clearArkAssetConfig() {
-  deleteSetting(ARK_ASSET_CONFIG_SETTING_KEY)
-  setRuntimeArkConfig({})
-  return getArkAssetConfigStatus()
 }
 
 function assertAllowedCloudApiUrl(rawUrl) {
@@ -4451,32 +4370,6 @@ export function setupIpcHandlers() {
   // ============================
   // Seedance Asset API
   // ============================
-  applyStoredArkAssetConfig()
-
-  ipcMain.handle('asset:get-config', () => {
-    try {
-      return getArkAssetConfigStatus()
-    } catch (e) {
-      return { success: false, error: e.message || String(e) }
-    }
-  })
-
-  ipcMain.handle('asset:save-config', (_, payload) => {
-    try {
-      return saveArkAssetConfig(payload)
-    } catch (e) {
-      return { success: false, error: e.message || String(e) }
-    }
-  })
-
-  ipcMain.handle('asset:clear-config', () => {
-    try {
-      return clearArkAssetConfig()
-    } catch (e) {
-      return { success: false, error: e.message || String(e) }
-    }
-  })
-
   ipcMain.handle('asset:create-group', async (_, { name, description }) => {
     return await createAssetGroup(name, description)
   })

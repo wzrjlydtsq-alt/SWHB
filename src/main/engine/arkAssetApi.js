@@ -6,47 +6,35 @@
  */
 import crypto from 'crypto'
 
+// ── 运行时配置 ──
+const ARK_ACCESS_KEY_ID_ENV = ['VOLCENGINE_ARK_ACCESS_KEY_ID', 'ARK_ACCESS_KEY_ID']
+const ARK_ACCESS_KEY_SECRET_ENV = ['VOLCENGINE_ARK_ACCESS_KEY_SECRET', 'ARK_ACCESS_KEY_SECRET']
 const ARK_REGION = 'cn-beijing'
 const ARK_SERVICE = 'ark'
 const ARK_HOST = 'ark.cn-beijing.volcengineapi.com'
 const ARK_VERSION = '2024-01-01'
 
-let runtimeArkConfig = {}
-let _defaultGroupId = null
-
-function maskSecret(value) {
-  const text = String(value || '')
-  if (!text) return ''
-  if (text.length <= 8) return `${text.slice(0, 2)}****`
-  return `${text.slice(0, 4)}****${text.slice(-4)}`
-}
-
-export function setRuntimeArkConfig(config = {}) {
-  runtimeArkConfig = {
-    accessKeyId: String(config.accessKeyId || '').trim(),
-    accessKeySecret: String(config.accessKeySecret || '').trim()
+function readArkEnv(...names) {
+  for (const name of names) {
+    const value = process.env[name]
+    if (value) return value
   }
-  _defaultGroupId = null
-}
-
-export function getRuntimeArkStatus() {
-  return {
-    configured: Boolean(runtimeArkConfig.accessKeyId && runtimeArkConfig.accessKeySecret),
-    accessKeyIdConfigured: Boolean(runtimeArkConfig.accessKeyId),
-    accessKeySecretConfigured: Boolean(runtimeArkConfig.accessKeySecret),
-    accessKeyIdMasked: maskSecret(runtimeArkConfig.accessKeyId)
-  }
+  return ''
 }
 
 function getArkCredentials() {
-  const { accessKeyId, accessKeySecret } = runtimeArkConfig
+  const accessKeyId = readArkEnv(...ARK_ACCESS_KEY_ID_ENV)
+  const accessKeySecret = readArkEnv(...ARK_ACCESS_KEY_SECRET_ENV)
   if (!accessKeyId || !accessKeySecret) {
     throw new Error(
-      '方舟素材库未配置 AK/SK，请先在设置的“服务接入”中保存方舟 AccessKey ID 和 Secret AccessKey。'
+      'Ark asset API credentials are not configured. Set VOLCENGINE_ARK_ACCESS_KEY_ID and VOLCENGINE_ARK_ACCESS_KEY_SECRET.'
     )
   }
   return { accessKeyId, accessKeySecret }
 }
+
+// 全局默认素材组合 ID（首次使用时自动创建）
+let _defaultGroupId = null
 
 // ═══════════════════════════════════════════════
 // V4 签名（火山引擎兼容 AWS Signature V4）
